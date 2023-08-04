@@ -12,9 +12,25 @@ Here are some results of mine, ref [talesofai's folk](https://github.com/talesof
     </tr>
 </table>
 <p style="margin-left: 2em; margin-top: -1em">
-Character Model：<a href="https://civitai.com/models/13237/genshen-impact-yoimiya">Yoimiya</a> 
-(with an initial reference image.)
+Character Model：<a href="https://civitai.com/models/13237/genshen-impact-yoimiya">Yoimiya</a> (with an initial reference image.)
 
+<table>
+    <tr>
+    <td><img src="__assets__/animations/model_11/miko_init.png"></td>
+    <td><img src="__assets__/animations/model_11/0803_v14.gif"></td>
+    <td><img src="__assets__/animations/model_11/0803_v15.gif"></td>
+    </tr>
+</table>
+Character Model：<a href="https://civitai.com/models/8484?modelVersionId=11523">Yae Miko</a> (with an initial reference image.)
+
+<table>
+    <tr>
+    <td><img src="__assets__/animations/model_12/init_image.jpg"></td>
+    <td><img src="__assets__/animations/model_12/0804_v14.gif"></td>
+    <td><img src="__assets__/animations/model_12/0804_v15.gif"></td>
+    </tr>
+</table>
+without Character Model, frame 20
 
 ## Original README
 
