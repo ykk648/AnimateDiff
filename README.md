@@ -32,6 +32,8 @@ Character Model：<a href="https://civitai.com/models/8484?modelVersionId=11523"
 </table>
 without Character Model, frame 20
 
+- 23.8.9 test sd-webui-text2video noise-add policy, got bad results
+
 ## Original README
 
 This repository is the official implementation of [AnimateDiff](https://arxiv.org/abs/2307.04725).

@@ -336,6 +336,15 @@ class AnimationPipeline(DiffusionPipeline):
                     # equal to "latents[:,:, i,:,:] = init_latents * 0.3259 + latents[:,:, i,:,:] * 0.9454"
                     latents = self.scheduler.add_noise(init_latents, latents, timestep)
 
+                # ref https://github.com/kabachuha/sd-webui-text2video
+                # from types import SimpleNamespace
+                # from ..utils.key_frames import T2VAnimKeys
+                # keys = T2VAnimKeys(
+                #     SimpleNamespace(**{'max_frames': video_length, 'inpainting_weights': "0:(0), \"max_i_f/4\":(1), \"3*max_i_f/4\":(1), \"max_i_f-1\":(0)"}),
+                #     seed, video_length)
+                # mask_weights = [keys.inpainting_weights_series[frame_idx] for frame_idx in range(video_length)]
+                # # [0.0, 0.3333333333333333, 0.6666666666666666, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.6666666666666667, 0.33333333333333337, 0.0, 0.0]
+
                 if init_latents is not None:
 
                     # init_alpha = [0.1, 0.09, 0.08, 0.07, 0.06, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05,
