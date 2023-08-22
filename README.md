@@ -1,8 +1,15 @@
 # AnimateDiff
 
+## Training
+
+- 23.8.22: 
+Drop local training scripts, using authors repo to do training experiences(I2V).
+First, make image injection refer [IP-Adapter](https://github.com/tencent-ailab/IP-Adapter).
+Already test in [AI_power](https://github.com/ykk648/AI_power/blob/main/sd_lib/clip_encoder.py).
+
 ## My Experience
 
-Here are some results of mine, ref [talesofai's folk](https://github.com/talesofai/AnimateDiff/blob/04b2715b39d4a02334b08cb6ee3dfe79f0a6cd7c/animatediff/pipelines/pipeline_animation.py#L288) and [diffusers](https://github.com/huggingface/diffusers/blob/main/src/diffusers/pipelines/deepfloyd_if/pipeline_if_img2img.py) to do image latent injection.
+- 23.8.8: Here are some results of mine, ref [talesofai's folk](https://github.com/talesofai/AnimateDiff/blob/04b2715b39d4a02334b08cb6ee3dfe79f0a6cd7c/animatediff/pipelines/pipeline_animation.py#L288) and [diffusers](https://github.com/huggingface/diffusers/blob/main/src/diffusers/pipelines/deepfloyd_if/pipeline_if_img2img.py) to do image latent injection.
 
 <table>
     <tr>
