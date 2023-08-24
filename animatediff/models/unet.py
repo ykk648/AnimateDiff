@@ -26,7 +26,6 @@ from .unet_blocks import (
 )
 from .resnet import InflatedConv3d
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
@@ -40,52 +39,52 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
 
     @register_to_config
     def __init__(
-        self,
-        sample_size: Optional[int] = None,
-        in_channels: int = 4,
-        out_channels: int = 4,
-        center_input_sample: bool = False,
-        flip_sin_to_cos: bool = True,
-        freq_shift: int = 0,      
-        down_block_types: Tuple[str] = (
-            "CrossAttnDownBlock3D",
-            "CrossAttnDownBlock3D",
-            "CrossAttnDownBlock3D",
-            "DownBlock3D",
-        ),
-        mid_block_type: str = "UNetMidBlock3DCrossAttn",
-        up_block_types: Tuple[str] = (
-            "UpBlock3D",
-            "CrossAttnUpBlock3D",
-            "CrossAttnUpBlock3D",
-            "CrossAttnUpBlock3D"
-        ),
-        only_cross_attention: Union[bool, Tuple[bool]] = False,
-        block_out_channels: Tuple[int] = (320, 640, 1280, 1280),
-        layers_per_block: int = 2,
-        downsample_padding: int = 1,
-        mid_block_scale_factor: float = 1,
-        act_fn: str = "silu",
-        norm_num_groups: int = 32,
-        norm_eps: float = 1e-5,
-        cross_attention_dim: int = 1280,
-        attention_head_dim: Union[int, Tuple[int]] = 8,
-        dual_cross_attention: bool = False,
-        use_linear_projection: bool = False,
-        class_embed_type: Optional[str] = None,
-        num_class_embeds: Optional[int] = None,
-        upcast_attention: bool = False,
-        resnet_time_scale_shift: str = "default",
-        
-        # Additional
-        use_motion_module              = False,
-        motion_module_resolutions      = ( 1,2,4,8 ),
-        motion_module_mid_block        = False,
-        motion_module_decoder_only     = False,
-        motion_module_type             = None,
-        motion_module_kwargs           = {},
-        unet_use_cross_frame_attention = None,
-        unet_use_temporal_attention    = None,
+            self,
+            sample_size: Optional[int] = None,
+            in_channels: int = 4,
+            out_channels: int = 4,
+            center_input_sample: bool = False,
+            flip_sin_to_cos: bool = True,
+            freq_shift: int = 0,
+            down_block_types: Tuple[str] = (
+                    "CrossAttnDownBlock3D",
+                    "CrossAttnDownBlock3D",
+                    "CrossAttnDownBlock3D",
+                    "DownBlock3D",
+            ),
+            mid_block_type: str = "UNetMidBlock3DCrossAttn",
+            up_block_types: Tuple[str] = (
+                    "UpBlock3D",
+                    "CrossAttnUpBlock3D",
+                    "CrossAttnUpBlock3D",
+                    "CrossAttnUpBlock3D"
+            ),
+            only_cross_attention: Union[bool, Tuple[bool]] = False,
+            block_out_channels: Tuple[int] = (320, 640, 1280, 1280),
+            layers_per_block: int = 2,
+            downsample_padding: int = 1,
+            mid_block_scale_factor: float = 1,
+            act_fn: str = "silu",
+            norm_num_groups: int = 32,
+            norm_eps: float = 1e-5,
+            cross_attention_dim: int = 1280,
+            attention_head_dim: Union[int, Tuple[int]] = 8,
+            dual_cross_attention: bool = False,
+            use_linear_projection: bool = False,
+            class_embed_type: Optional[str] = None,
+            num_class_embeds: Optional[int] = None,
+            upcast_attention: bool = False,
+            resnet_time_scale_shift: str = "default",
+
+            # Additional
+            use_motion_module=False,
+            motion_module_resolutions=(1, 2, 4, 8),
+            motion_module_mid_block=False,
+            motion_module_decoder_only=False,
+            motion_module_type=None,
+            motion_module_kwargs={},
+            unet_use_cross_frame_attention=None,
+            unet_use_temporal_attention=None,
     ):
         super().__init__()
 
@@ -150,8 +149,9 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
 
                 unet_use_cross_frame_attention=unet_use_cross_frame_attention,
                 unet_use_temporal_attention=unet_use_temporal_attention,
-                
-                use_motion_module=use_motion_module and (res in motion_module_resolutions) and (not motion_module_decoder_only),
+
+                use_motion_module=use_motion_module and (res in motion_module_resolutions) and (
+                    not motion_module_decoder_only),
                 motion_module_type=motion_module_type,
                 motion_module_kwargs=motion_module_kwargs,
             )
@@ -175,14 +175,14 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
 
                 unet_use_cross_frame_attention=unet_use_cross_frame_attention,
                 unet_use_temporal_attention=unet_use_temporal_attention,
-                
+
                 use_motion_module=use_motion_module and motion_module_mid_block,
                 motion_module_type=motion_module_type,
                 motion_module_kwargs=motion_module_kwargs,
             )
         else:
             raise ValueError(f"unknown mid_block_type : {mid_block_type}")
-        
+
         # count how many layers upsample the videos
         self.num_upsamplers = 0
 
@@ -310,13 +310,13 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
             module.gradient_checkpointing = value
 
     def forward(
-        self,
-        sample: torch.FloatTensor,
-        timestep: Union[torch.Tensor, float, int],
-        encoder_hidden_states: torch.Tensor,
-        class_labels: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        return_dict: bool = True,
+            self,
+            sample: torch.FloatTensor,
+            timestep: Union[torch.Tensor, float, int],
+            encoder_hidden_states: torch.Tensor,
+            class_labels: Optional[torch.Tensor] = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            return_dict: bool = True,
     ) -> Union[UNet3DConditionOutput, Tuple]:
         r"""
         Args:
@@ -335,7 +335,7 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
         # The overall upsampling factor is equal to 2 ** (# num of upsampling layears).
         # However, the upsampling interpolation output size can be forced to fit any upsampling size
         # on the fly if necessary.
-        default_overall_up_factor = 2**self.num_upsamplers
+        default_overall_up_factor = 2 ** self.num_upsamplers
 
         # upsample size should be forwarded when sample is not a multiple of `default_overall_up_factor`
         forward_upsample_size = False
@@ -402,7 +402,8 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
                     attention_mask=attention_mask,
                 )
             else:
-                sample, res_samples = downsample_block(hidden_states=sample, temb=emb, encoder_hidden_states=encoder_hidden_states)
+                sample, res_samples = downsample_block(hidden_states=sample, temb=emb,
+                                                       encoder_hidden_states=encoder_hidden_states)
 
             down_block_res_samples += res_samples
 
@@ -415,7 +416,7 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
         for i, upsample_block in enumerate(self.up_blocks):
             is_final_block = i == len(self.up_blocks) - 1
 
-            res_samples = down_block_res_samples[-len(upsample_block.resnets) :]
+            res_samples = down_block_res_samples[-len(upsample_block.resnets):]
             down_block_res_samples = down_block_res_samples[: -len(upsample_block.resnets)]
 
             # if we have not reached the final block and need to forward the
@@ -434,7 +435,8 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
                 )
             else:
                 sample = upsample_block(
-                    hidden_states=sample, temb=emb, res_hidden_states_tuple=res_samples, upsample_size=upsample_size, encoder_hidden_states=encoder_hidden_states,
+                    hidden_states=sample, temb=emb, res_hidden_states_tuple=res_samples, upsample_size=upsample_size,
+                    encoder_hidden_states=encoder_hidden_states,
                 )
 
         # post-process
@@ -482,8 +484,8 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
         m, u = model.load_state_dict(state_dict, strict=False)
         print(f"### missing keys: {len(m)}; \n### unexpected keys: {len(u)};")
         # print(f"### missing keys:\n{m}\n### unexpected keys:\n{u}\n")
-        
+
         params = [p.numel() if "temporal" in n else 0 for n, p in model.named_parameters()]
         print(f"### Temporal Module Parameters: {sum(params) / 1e6} M")
-        
+
         return model
