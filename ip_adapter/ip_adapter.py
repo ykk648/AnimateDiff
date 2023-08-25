@@ -6,9 +6,11 @@ import os
 from typing import List
 
 import torch
+from diffusers import StableDiffusionPipeline
 from transformers import CLIPVisionModelWithProjection, CLIPImageProcessor
 from PIL import Image
 import torch.nn.functional as F
+from .resampler import Resampler
 
 
 def is_torch2_available():
@@ -47,6 +49,7 @@ class IPAdapter:
         self.device = device
         self.image_encoder_path = image_encoder_path
         self.ip_ckpt = ip_ckpt
+        self.num_tokens = num_tokens
 
         self.pipe = sd_pipe.to(self.device)
         self.set_ip_adapter()
@@ -56,19 +59,22 @@ class IPAdapter:
                                                                                                        dtype=torch.float16)
         self.clip_image_processor = CLIPImageProcessor()
         # image proj model
-        self.image_proj_model = ImageProjModel(
-            cross_attention_dim=self.pipe.unet.config.cross_attention_dim,
-            clip_embeddings_dim=self.image_encoder.config.projection_dim,
-            clip_extra_context_tokens=num_tokens,
-        ).to(self.device, dtype=torch.float16)
+        self.image_proj_model = self.init_proj()
 
         self.load_ip_adapter()
+
+    def init_proj(self):
+        image_proj_model = ImageProjModel(
+            cross_attention_dim=self.pipe.unet.config.cross_attention_dim,
+            clip_embeddings_dim=self.image_encoder.config.projection_dim,
+            clip_extra_context_tokens=self.num_tokens,
+        ).to(self.device, dtype=torch.float16)
+        return image_proj_model
 
     def set_ip_adapter(self):
         unet = self.pipe.unet
         attn_procs = {}
         for name in unet.attn_processors.keys():
-            print(name)
             cross_attention_dim = None if name.endswith("attn1.processor") else unet.config.cross_attention_dim
             if name.startswith("mid_block"):
                 hidden_size = unet.config.block_out_channels[-1]
@@ -82,7 +88,7 @@ class IPAdapter:
                 attn_procs[name] = AttnProcessor()
             else:
                 attn_procs[name] = IPAttnProcessor(hidden_size=hidden_size, cross_attention_dim=cross_attention_dim,
-                                                   scale=1.0).to(self.device, dtype=torch.float16)
+                                                   scale=1.0).to(self.device)
         unet.set_attn_processor(attn_procs)
 
     def load_ip_adapter(self):
@@ -90,6 +96,9 @@ class IPAdapter:
         self.image_proj_model.load_state_dict(state_dict["image_proj"])
         ip_layers = torch.nn.ModuleList(self.pipe.unet.attn_processors.values())
         ip_layers.load_state_dict(state_dict["ip_adapter"])
+
+    def return_pipe(self):
+        return self.pipe
 
     @torch.inference_mode()
     def get_image_embeds(self, pil_image):
@@ -105,6 +114,25 @@ class IPAdapter:
         for attn_processor in self.pipe.unet.attn_processors.values():
             if isinstance(attn_processor, IPAttnProcessor):
                 attn_processor.scale = scale
+
+    def get_prompts(self, prompt, negative_prompt, pil_image, num_samples=1, strength=1):
+        image_prompt_embeds, uncond_image_prompt_embeds = self.get_image_embeds(pil_image)
+        bs_embed, seq_len, _ = image_prompt_embeds.shape
+        image_prompt_embeds = image_prompt_embeds.repeat(1, num_samples, 1)
+        image_prompt_embeds = image_prompt_embeds.view(bs_embed * num_samples, seq_len, -1)
+        uncond_image_prompt_embeds = uncond_image_prompt_embeds.repeat(1, num_samples, 1)
+        uncond_image_prompt_embeds = uncond_image_prompt_embeds.view(bs_embed * num_samples, seq_len, -1)
+
+        image_prompt_embeds = strength * image_prompt_embeds + (1 - strength) * uncond_image_prompt_embeds
+
+        with torch.inference_mode():
+            prompt_embeds = self.pipe._encode_prompt(
+                prompt, device=self.device, num_videos_per_prompt=num_samples, do_classifier_free_guidance=True,
+                negative_prompt=negative_prompt)
+            negative_prompt_embeds_, prompt_embeds_ = prompt_embeds.chunk(2)
+            prompt_embeds = torch.cat([prompt_embeds_, image_prompt_embeds], dim=1)
+            negative_prompt_embeds = torch.cat([negative_prompt_embeds_, uncond_image_prompt_embeds], dim=1)
+        return torch.cat([negative_prompt_embeds, prompt_embeds])
 
     def generate(
             self,
@@ -220,3 +248,33 @@ class IPAdapterXL(IPAdapter):
         ).images
 
         return images
+
+
+class IPAdapterPlus(IPAdapter):
+    """IP-Adapter with fine-grained features"""
+
+    def init_proj(self):
+        image_proj_model = Resampler(
+            dim=self.pipe.unet.config.cross_attention_dim,
+            depth=4,
+            dim_head=64,
+            heads=12,
+            num_queries=self.num_tokens,
+            embedding_dim=self.image_encoder.config.hidden_size,
+            output_dim=self.pipe.unet.config.cross_attention_dim,
+            ff_mult=4
+        ).to(self.device, dtype=torch.float16)
+        return image_proj_model
+
+    @torch.inference_mode()
+    def get_image_embeds(self, pil_image):
+        if isinstance(pil_image, Image.Image):
+            pil_image = [pil_image]
+        clip_image = self.clip_image_processor(images=pil_image, return_tensors="pt").pixel_values
+        clip_image = clip_image.to(self.device, dtype=torch.float16)
+        clip_image_embeds = self.image_encoder(clip_image, output_hidden_states=True).hidden_states[-2]
+        image_prompt_embeds = self.image_proj_model(clip_image_embeds)
+        uncond_clip_image_embeds = \
+            self.image_encoder(torch.zeros_like(clip_image), output_hidden_states=True).hidden_states[-2]
+        uncond_image_prompt_embeds = self.image_proj_model(uncond_clip_image_embeds)
+        return image_prompt_embeds, uncond_image_prompt_embeds
