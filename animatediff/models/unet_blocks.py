@@ -225,8 +225,8 @@ class UNetMidBlock3DCrossAttn(nn.Module):
                     use_linear_projection=use_linear_projection,
                     upcast_attention=upcast_attention,
 
-                    unet_use_cross_frame_attention=unet_use_cross_frame_attention,
-                    unet_use_temporal_attention=unet_use_temporal_attention,
+                    # unet_use_cross_frame_attention=unet_use_cross_frame_attention,
+                    # unet_use_temporal_attention=unet_use_temporal_attention,
                 )
             )
             motion_modules.append(
@@ -334,8 +334,8 @@ class CrossAttnDownBlock3D(nn.Module):
                     only_cross_attention=only_cross_attention,
                     upcast_attention=upcast_attention,
 
-                    unet_use_cross_frame_attention=unet_use_cross_frame_attention,
-                    unet_use_temporal_attention=unet_use_temporal_attention,
+                    # unet_use_cross_frame_attention=unet_use_cross_frame_attention,
+                    # unet_use_temporal_attention=unet_use_temporal_attention,
                 )
             )
             motion_modules.append(
@@ -572,8 +572,8 @@ class CrossAttnUpBlock3D(nn.Module):
                     only_cross_attention=only_cross_attention,
                     upcast_attention=upcast_attention,
 
-                    unet_use_cross_frame_attention=unet_use_cross_frame_attention,
-                    unet_use_temporal_attention=unet_use_temporal_attention,
+                    # unet_use_cross_frame_attention=unet_use_cross_frame_attention,
+                    # unet_use_temporal_attention=unet_use_temporal_attention,
                 )
             )
             motion_modules.append(
