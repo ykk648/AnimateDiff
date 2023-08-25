@@ -16,6 +16,7 @@ from transformers import CLIPTextModel, CLIPTokenizer
 from diffusers.configuration_utils import FrozenDict
 from diffusers.models import AutoencoderKL
 from diffusers.pipeline_utils import DiffusionPipeline
+from diffusers.loaders import FromSingleFileMixin
 from diffusers.schedulers import (
     DDIMScheduler,
     DPMSolverMultistepScheduler,
@@ -39,7 +40,7 @@ class AnimationPipelineOutput(BaseOutput):
     videos: Union[torch.Tensor, np.ndarray]
 
 
-class AnimationPipeline(DiffusionPipeline):
+class AnimationPipeline_StableDiffusion(DiffusionPipeline, FromSingleFileMixin):
     _optional_components = []
 
     def __init__(
@@ -56,6 +57,7 @@ class AnimationPipeline(DiffusionPipeline):
                 EulerAncestralDiscreteScheduler,
                 DPMSolverMultistepScheduler,
             ],
+            safety_checker=None,
     ):
         super().__init__()
 
@@ -113,6 +115,7 @@ class AnimationPipeline(DiffusionPipeline):
             tokenizer=tokenizer,
             unet=unet,
             scheduler=scheduler,
+            safety_checker=safety_checker,
         )
         self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
 
@@ -284,7 +287,7 @@ class AnimationPipeline(DiffusionPipeline):
             )
 
     def prepare_latents(self, init_image, batch_size, num_channels_latents, video_length, height, width, dtype, device,
-                        generator, timestep=None, latents=None):
+                        generator, timestep=None, latents=None, **kwargs):
         shape = (
             batch_size, num_channels_latents, video_length, height // self.vae_scale_factor,
             width // self.vae_scale_factor)
@@ -347,17 +350,23 @@ class AnimationPipeline(DiffusionPipeline):
                     # init_alpha = [0.1, 0.09, 0.08, 0.07, 0.06, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05,
                     #               0.05, 0.05]
 
-                    init_alpha = 0.1
-                    truncate_alpha = 0.06  # hyper-parameters
+                    init_alpha = kwargs['init_alpha']
+                    init_alpha_copy = kwargs['init_alpha']
+                    truncate_alpha = kwargs['truncate_alpha']  # hyper-parameters
+                    alpha_step = kwargs['alpha_step']  # hyper-parameters
+                    alpha_list = []
                     for i in range(video_length):
                         # # ref https://github.com/talesofai/AnimateDiff
                         # init_alpha = (video_length - float(i)) / video_length / 30
                         # latents[:, :, i, :, :] = init_latents * init_alpha + latents[:, :, i, :, :] * (1 - init_alpha)
 
                         # truncate the alpha value
-                        if init_alpha != truncate_alpha:
-                            init_alpha = round(0.1 - i * 0.01, 2)  # decimal
+                        if init_alpha != truncate_alpha and init_alpha != 0:
+                            init_alpha = round(init_alpha_copy - i * alpha_step, 2)  # decimal
+                        assert init_alpha >= 0
+                        alpha_list.append(init_alpha)
                         latents[:, :, i, :, :] = init_latents * init_alpha + latents[:, :, i, :, :] * (1 - init_alpha)
+                    print(alpha_list)
         else:
             if latents.shape != shape:
                 raise ValueError(f"Unexpected latents shape, got {latents.shape}, expected {shape}")
@@ -386,6 +395,7 @@ class AnimationPipeline(DiffusionPipeline):
             init_image: str = None,
             height: Optional[int] = None,
             width: Optional[int] = None,
+            text_embeddings=None,
             num_inference_steps: int = 50,
             guidance_scale: float = 7.5,
             negative_prompt: Optional[Union[str, List[str]]] = None,
@@ -421,20 +431,23 @@ class AnimationPipeline(DiffusionPipeline):
         do_classifier_free_guidance = guidance_scale > 1.0
 
         # Encode input prompt
-        prompt = prompt if isinstance(prompt, list) else [prompt] * batch_size
-        if negative_prompt is not None:
-            negative_prompt = negative_prompt if isinstance(negative_prompt, list) else [negative_prompt] * batch_size
-        text_embeddings = self._encode_prompt(
-            prompt, device, num_videos_per_prompt, do_classifier_free_guidance, negative_prompt
-        )
+        if text_embeddings is None:
+            prompt = prompt if isinstance(prompt, list) else [prompt] * batch_size
+            if negative_prompt is not None:
+                negative_prompt = negative_prompt if isinstance(negative_prompt, list) else [
+                                                                                                negative_prompt] * batch_size
+            text_embeddings = self._encode_prompt(
+                prompt, device, num_videos_per_prompt, do_classifier_free_guidance, negative_prompt
+            )
 
         # Prepare timesteps
         self.scheduler.set_timesteps(num_inference_steps, device=device)
         timesteps = self.scheduler.timesteps
 
         # ref diffusers img2img
-        denoise_strength = 0.6  # hyper-parameters
+        denoise_strength = kwargs['denoise_strength']  # hyper-parameters
         timesteps, num_inference_steps = self.get_timesteps(num_inference_steps, denoise_strength)
+
         # noise_timestep = timesteps[0:1]
         # noise_timestep = noise_timestep.repeat(batch_size * num_videos_per_prompt)
 
@@ -452,6 +465,9 @@ class AnimationPipeline(DiffusionPipeline):
             generator,
             timestep=None,
             latents=latents,
+            init_alpha=kwargs['init_alpha'],
+            truncate_alpha=kwargs['truncate_alpha'],
+            alpha_step=kwargs['alpha_step'],
         )
         latents_dtype = latents.dtype
 

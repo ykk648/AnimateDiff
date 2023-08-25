@@ -1,6 +1,32 @@
 # AnimateDiff
 
-## Training
+## Combining
+
+- [x] update diffusers to 0.20.0
+- [x] support [IP-Adapter](https://github.com/tencent-ailab/IP-Adapter)
+- [ ] reconstruction codes and make animatediff a diffusers plugin like [sd-webui-animatediff](https://github.com/continue-revolution/sd-webui-animatediff)
+- [ ] controlnet from [TDS4874](https://github.com/TDS4874/sd-webui-controlnet/tree/animate-diff-support)
+- [ ] solve/locate color degrade problem
+
+<table>
+    <tr>
+    <td><img src="__assets__/ipadapter/a_girl_in_the_wind.png"></td>
+    <td><img src="__assets__/ipadapter/results/girl_wind.gif"></td>
+    </tr>
+</table>
+<table>
+    <tr>
+    <td><img src="__assets__/ipadapter/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"></td>
+    <td><img src="__assets__/ipadapter/results/astronaut_mars.gif"></td>
+    </tr>
+</table>
+<p style="margin-left: 2em; margin-top: -1em">
+
+First image from [pikalabs](https://twitter.com/pika_labs/status/1678892871670464513), second was generated from sd1.5
+
+First used IPAdapter+init-image-denoise, second used only IPAdapter
+
+## ~~Training~~
 
 - 23.8.22: 
 Drop local training scripts, using authors repo to do training experiences(I2V).

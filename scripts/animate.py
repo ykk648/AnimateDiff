@@ -5,7 +5,7 @@ import os
 from omegaconf import OmegaConf
 
 import torch
-
+import PIL
 import diffusers
 from diffusers import AutoencoderKL, DDIMScheduler
 
@@ -13,13 +13,13 @@ from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
 
 from animatediff.models.unet import UNet3DConditionModel
-from animatediff.pipelines.pipeline_animation import AnimationPipeline
+from animatediff.pipelines.pipeline_animation import AnimationPipeline_StableDiffusion
 from animatediff.utils.util import save_videos_grid
 from animatediff.utils.convert_from_ckpt import convert_ldm_unet_checkpoint, convert_ldm_clip_checkpoint, \
     convert_ldm_vae_checkpoint
 from animatediff.utils.convert_lora_safetensor_to_diffusers import convert_lora
 from diffusers.utils.import_utils import is_xformers_available
-
+from ip_adapter.ip_adapter import IPAdapterPlus, IPAdapter
 from einops import rearrange, repeat
 
 import csv, pdb, glob
@@ -61,7 +61,7 @@ def main(args):
             else:
                 assert False
 
-            pipeline = AnimationPipeline(
+            pipeline = AnimationPipeline_StableDiffusion(
                 vae=vae, text_encoder=text_encoder, tokenizer=tokenizer, unet=unet,
                 scheduler=DDIMScheduler(**OmegaConf.to_container(inference_config.noise_scheduler_kwargs)),
             ).to("cuda")
@@ -95,7 +95,8 @@ def main(args):
                             for key in f.keys():
                                 base_state_dict[key] = f.get_tensor(key)
 
-                                # vae
+                    # pipeline.from_single_file(model_config.base, use_safetensors=True)
+                    # vae
                     converted_vae_checkpoint = convert_ldm_vae_checkpoint(base_state_dict, pipeline.vae.config)
                     pipeline.vae.load_state_dict(converted_vae_checkpoint)
                     # unet
@@ -121,7 +122,6 @@ def main(args):
                                     add_state_dict[key] = f.get_tensor(key)
                             pipeline = convert_lora(pipeline, add_state_dict, alpha=lora_alpha)
 
-            pipeline.to("cuda")
             ### <<< create validation pipeline <<< ###
 
             prompts = model_config.prompt
@@ -134,6 +134,17 @@ def main(args):
             random_seeds = random_seeds * len(prompts) if len(random_seeds) == 1 else random_seeds
 
             config[config_key].random_seed = []
+
+            if model_config.IPAdapter:
+                print('init IPAdapter model.')
+                ipap = IPAdapterPlus(pipeline, f'{args.ip_adapter_model_dir}/clip_image_encoder',
+                                     f'{args.ip_adapter_model_dir}/ip-adapter-plus_sd15.bin', "cuda", num_tokens=16)
+                # ipap = IPAdapter(pipeline, f'{args.ip_adapter_model_dir}/clip_image_encoder',
+                #                      f'{args.ip_adapter_model_dir}/ip-adapter_sd15.bin', "cuda")
+                pipeline = ipap.return_pipe()
+
+            pipeline.to("cuda")
+
             for prompt_idx, (prompt, n_prompt, random_seed) in enumerate(zip(prompts, n_prompts, random_seeds)):
 
                 # manually set random seed for reproduction
@@ -145,10 +156,21 @@ def main(args):
 
                 print(f"current seed: {torch.initial_seed()}")
                 print(f"sampling {prompt} ...")
+
+                if model_config.IPAdapter:
+                    text_embeddings = ipap.get_prompts(prompt, n_prompt, PIL.Image.open(init_image), strength=model_config.ip_strength)
+                else:
+                    text_embeddings = None
+
                 sample = pipeline(
                     prompt,
                     init_image=init_image,
+                    denoise_strength=model_config.denoise_strength,
+                    init_alpha=model_config.init_alpha,
+                    alpha_step=model_config.alpha_step,
+                    truncate_alpha=model_config.truncate_alpha,
                     negative_prompt=n_prompt,
+                    text_embeddings=text_embeddings,
                     num_inference_steps=model_config.steps,
                     guidance_scale=model_config.guidance_scale,
                     width=args.W,
@@ -174,6 +196,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--pretrained_model_path", type=str, default="models/StableDiffusion/stable-diffusion-v1-5", )
+    parser.add_argument("--ip_adapter_model_dir", type=str, default="models/IP_Adapter", )
     parser.add_argument("--inference_config", type=str, default="configs/inference/inference.yaml")
     parser.add_argument("--config", type=str, required=True)
 
