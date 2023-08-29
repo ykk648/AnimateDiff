@@ -12,7 +12,7 @@ from diffusers import AutoencoderKL, DDIMScheduler
 from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
 
-from animatediff.models.unet import UNet3DConditionModel
+from animatediff.models.unet_2d_condition import AnimateDiffUNet2DConditionModel
 from animatediff.pipelines.pipeline_animation import AnimationPipeline_StableDiffusion
 from animatediff.utils.util import save_videos_grid
 from animatediff.utils.convert_from_ckpt import convert_ldm_unet_checkpoint, convert_ldm_clip_checkpoint, \
@@ -52,7 +52,7 @@ def main(args):
             tokenizer = CLIPTokenizer.from_pretrained(args.pretrained_model_path, subfolder="tokenizer")
             text_encoder = CLIPTextModel.from_pretrained(args.pretrained_model_path, subfolder="text_encoder")
             vae = AutoencoderKL.from_pretrained(args.pretrained_model_path, subfolder="vae")
-            unet = UNet3DConditionModel.from_pretrained_2d(args.pretrained_model_path, subfolder="unet",
+            unet = AnimateDiffUNet2DConditionModel.from_pretrained(args.pretrained_model_path, subfolder="unet",
                                                            unet_additional_kwargs=OmegaConf.to_container(
                                                                inference_config.unet_additional_kwargs))
 

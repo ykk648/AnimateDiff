@@ -2,11 +2,11 @@
 
 ## Combining
 
-- [x] update diffusers to 0.20.0
+- [x] update diffusers to 0.20.1
 - [x] support [IP-Adapter](https://github.com/tencent-ailab/IP-Adapter)
-- [ ] reconstruction codes and make animatediff a diffusers plugin like [sd-webui-animatediff](https://github.com/continue-revolution/sd-webui-animatediff)
+- [x] reconstruction codes and make animatediff a diffusers plugin like [sd-webui-animatediff](https://github.com/continue-revolution/sd-webui-animatediff)
 - [ ] controlnet from [TDS4874](https://github.com/TDS4874/sd-webui-controlnet/tree/animate-diff-support)
-- [ ] solve/locate color degrade problem
+- [x] solve/locate color degrade problem, check [TDS_ solution](https://note.com/tds_/n/n5aad9ef8a9b1), It seems that any color problems came from DDIM params.
 
 <table>
     <tr>
@@ -65,7 +65,7 @@ Character Model：<a href="https://civitai.com/models/8484?modelVersionId=11523"
 </table>
 without Character Model, frame 20
 
-- 23.8.9 test sd-webui-text2video noise-add policy, got bad results
+- 23.8.9 test [sd-webui-text2video](https://github.com/kabachuha/sd-webui-text2video) noise-add policy, got bad results
 
 ## Original README
 

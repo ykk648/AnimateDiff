@@ -1,29 +1,26 @@
-# Copyright 2023 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# Adapted from https://github.com/huggingface/diffusers/blob/main/src/diffusers/models/unet_2d_condition.py
+# date: 23.08.29
+# diffusers version: 0.20.1
+
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
+
+import os
+import json
+import pdb
 
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint
 
-from ..configuration_utils import ConfigMixin, register_to_config
-from ..loaders import UNet2DConditionLoadersMixin
-from ..utils import BaseOutput, logging
-from .activations import get_activation
-from .attention_processor import AttentionProcessor, AttnProcessor
-from .embeddings import (
+from diffusers.configuration_utils import ConfigMixin, register_to_config
+from diffusers.utils import BaseOutput, logging
+from diffusers.models.modeling_utils import ModelMixin
+from diffusers.models.attention_processor import AttentionProcessor, AttnProcessor
+from diffusers.models.activations import get_activation
+from diffusers.loaders import UNet2DConditionLoadersMixin
+
+from diffusers.models.embeddings import (
     GaussianFourierProjection,
     ImageHintTimeEmbedding,
     ImageProjection,
@@ -35,20 +32,22 @@ from .embeddings import (
     TimestepEmbedding,
     Timesteps,
 )
-from .modeling_utils import ModelMixin
+
 from .unet_2d_blocks import (
+    CrossAttnDownBlock2D,
+    CrossAttnUpBlock2D,
+    DownBlock2D,
     UNetMidBlock2DCrossAttn,
-    UNetMidBlock2DSimpleCrossAttn,
+    UpBlock2D,
     get_down_block,
-    get_up_block,
-)
+    get_up_block)
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
 @dataclass
-class UNet2DConditionOutput(BaseOutput):
+class AnimateDiffUNet2DConditionOutput(BaseOutput):
     """
     The output of [`UNet2DConditionModel`].
 
@@ -60,7 +59,7 @@ class UNet2DConditionOutput(BaseOutput):
     sample: torch.FloatTensor = None
 
 
-class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin):
+class AnimateDiffUNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin):
     r"""
     A conditional 2D UNet model that takes a noisy sample, conditional state, and a timestep and returns a sample
     shaped output.
@@ -204,6 +203,16 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
         mid_block_only_cross_attention: Optional[bool] = None,
         cross_attention_norm: Optional[str] = None,
         addition_embed_type_num_heads=64,
+
+        # Additional
+        use_motion_module=False,
+        motion_module_resolutions=(1, 2, 4, 8),
+        motion_module_mid_block=False,
+        motion_module_decoder_only=False,
+        motion_module_type=None,
+        motion_module_kwargs={},
+        unet_use_cross_frame_attention=None,
+        unet_use_temporal_attention=None,
     ):
         super().__init__()
 
@@ -425,6 +434,7 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
         # down
         output_channel = block_out_channels[0]
         for i, down_block_type in enumerate(down_block_types):
+            res = 2 ** i
             input_channel = output_channel
             output_channel = block_out_channels[i]
             is_final_block = i == len(block_out_channels) - 1
@@ -453,6 +463,11 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
                 resnet_out_scale_factor=resnet_out_scale_factor,
                 cross_attention_norm=cross_attention_norm,
                 attention_head_dim=attention_head_dim[i] if attention_head_dim[i] is not None else output_channel,
+
+                use_motion_module=use_motion_module and (res in motion_module_resolutions) and (
+                    not motion_module_decoder_only),
+                motion_module_type=motion_module_type,
+                motion_module_kwargs=motion_module_kwargs,
             )
             self.down_blocks.append(down_block)
 
@@ -473,6 +488,10 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
                 use_linear_projection=use_linear_projection,
                 upcast_attention=upcast_attention,
                 attention_type=attention_type,
+
+                use_motion_module=use_motion_module and motion_module_mid_block,
+                motion_module_type=motion_module_type,
+                motion_module_kwargs=motion_module_kwargs,
             )
         elif mid_block_type == "UNetMidBlock2DSimpleCrossAttn":
             self.mid_block = UNetMidBlock2DSimpleCrossAttn(
@@ -494,7 +513,7 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
         else:
             raise ValueError(f"unknown mid_block_type : {mid_block_type}")
 
-        # count how many layers upsample the images
+        # count how many layers upsample the videos
         self.num_upsamplers = 0
 
         # up
@@ -507,6 +526,7 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
 
         output_channel = reversed_block_out_channels[0]
         for i, up_block_type in enumerate(up_block_types):
+            res = 2 ** (3 - i)
             is_final_block = i == len(block_out_channels) - 1
 
             prev_output_channel = output_channel
@@ -544,6 +564,10 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
                 resnet_out_scale_factor=resnet_out_scale_factor,
                 cross_attention_norm=cross_attention_norm,
                 attention_head_dim=attention_head_dim[i] if attention_head_dim[i] is not None else output_channel,
+
+                use_motion_module=use_motion_module and (res in motion_module_resolutions),
+                motion_module_type=motion_module_type,
+                motion_module_kwargs=motion_module_kwargs,
             )
             self.up_blocks.append(up_block)
             prev_output_channel = output_channel
@@ -720,7 +744,7 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
         mid_block_additional_residual: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         return_dict: bool = True,
-    ) -> Union[UNet2DConditionOutput, Tuple]:
+    ) -> Union[AnimateDiffUNet2DConditionOutput, Tuple]:
         r"""
         The [`UNet2DConditionModel`] forward method.
 
@@ -937,7 +961,8 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
                     **additional_residuals,
                 )
             else:
-                sample, res_samples = downsample_block(hidden_states=sample, temb=emb)
+                sample, res_samples = downsample_block(hidden_states=sample, temb=emb,
+                                                       encoder_hidden_states=encoder_hidden_states)
 
                 if is_adapter and len(down_block_additional_residuals) > 0:
                     sample += down_block_additional_residuals.pop(0)
@@ -994,7 +1019,8 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
                 )
             else:
                 sample = upsample_block(
-                    hidden_states=sample, temb=emb, res_hidden_states_tuple=res_samples, upsample_size=upsample_size
+                    hidden_states=sample, temb=emb, res_hidden_states_tuple=res_samples, upsample_size=upsample_size,
+                    encoder_hidden_states=encoder_hidden_states,
                 )
 
         # 6. post-process
@@ -1006,4 +1032,45 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
         if not return_dict:
             return (sample,)
 
-        return UNet2DConditionOutput(sample=sample)
+        return AnimateDiffUNet2DConditionOutput(sample=sample)
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_path, subfolder=None, unet_additional_kwargs=None):
+        if subfolder is not None:
+            pretrained_model_path = os.path.join(pretrained_model_path, subfolder)
+        print(f"loaded temporal unet's pretrained weights from {pretrained_model_path} ...")
+
+        config_file = os.path.join(pretrained_model_path, 'config.json')
+        if not os.path.isfile(config_file):
+            raise RuntimeError(f"{config_file} does not exist")
+        with open(config_file, "r") as f:
+            config = json.load(f)
+        config["_class_name"] = cls.__name__
+        config["down_block_types"] = [
+            "CrossAttnDownBlock2D",
+            "CrossAttnDownBlock2D",
+            "CrossAttnDownBlock2D",
+            "DownBlock2D"
+        ]
+        config["up_block_types"] = [
+            "UpBlock2D",
+            "CrossAttnUpBlock2D",
+            "CrossAttnUpBlock2D",
+            "CrossAttnUpBlock2D"
+        ]
+
+        from diffusers.utils import WEIGHTS_NAME
+        model = cls.from_config(config, **unet_additional_kwargs)
+        model_file = os.path.join(pretrained_model_path, WEIGHTS_NAME)
+        if not os.path.isfile(model_file):
+            raise RuntimeError(f"{model_file} does not exist")
+        state_dict = torch.load(model_file, map_location="cpu")
+
+        m, u = model.load_state_dict(state_dict, strict=False)
+        print(f"### missing keys: {len(m)}; \n### unexpected keys: {len(u)};")
+        # print(f"### missing keys:\n{m}\n### unexpected keys:\n{u}\n")
+
+        params = [p.numel() if "temporal" in n else 0 for n, p in model.named_parameters()]
+        print(f"### Temporal Module Parameters: {sum(params) / 1e6} M")
+
+        return model

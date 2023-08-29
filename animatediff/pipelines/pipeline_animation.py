@@ -8,6 +8,7 @@ import numpy as np
 import torch
 import PIL
 from tqdm import tqdm
+from einops import rearrange, repeat
 
 from diffusers.utils import is_accelerate_available
 from packaging import version
@@ -15,7 +16,7 @@ from transformers import CLIPTextModel, CLIPTokenizer
 
 from diffusers.configuration_utils import FrozenDict
 from diffusers.models import AutoencoderKL
-from diffusers.pipeline_utils import DiffusionPipeline
+from diffusers.pipelines.pipeline_utils import DiffusionPipeline
 from diffusers.loaders import FromSingleFileMixin
 from diffusers.schedulers import (
     DDIMScheduler,
@@ -29,7 +30,7 @@ from diffusers.utils import deprecate, logging, BaseOutput
 
 from einops import rearrange
 
-from ..models.unet import UNet3DConditionModel
+from ..models.unet_2d_condition import AnimateDiffUNet2DConditionOutput
 from ..utils.util import preprocess_image
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -48,7 +49,7 @@ class AnimationPipeline_StableDiffusion(DiffusionPipeline, FromSingleFileMixin):
             vae: AutoencoderKL,
             text_encoder: CLIPTextModel,
             tokenizer: CLIPTokenizer,
-            unet: UNet3DConditionModel,
+            unet: AnimateDiffUNet2DConditionOutput,
             scheduler: Union[
                 DDIMScheduler,
                 PNDMScheduler,
@@ -452,7 +453,7 @@ class AnimationPipeline_StableDiffusion(DiffusionPipeline, FromSingleFileMixin):
         # noise_timestep = noise_timestep.repeat(batch_size * num_videos_per_prompt)
 
         # Prepare latent variables
-        num_channels_latents = self.unet.in_channels
+        num_channels_latents = self.unet.config.in_channels
         latents = self.prepare_latents(
             init_image,
             batch_size * num_videos_per_prompt,
@@ -476,15 +477,24 @@ class AnimationPipeline_StableDiffusion(DiffusionPipeline, FromSingleFileMixin):
 
         # Denoising loop
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
+
+        # torch.Size([32, 77, 768])
+        text_embeddings = repeat(text_embeddings, 'b n c -> (b f) n c', f=video_length)
+
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
                 # expand the latents if we are doing classifier free guidance
+                # torch.Size([2, 4, 16, 64, 64])
                 latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
                 latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
                 # predict the noise residual
+                # torch.Size([32, 4, 64, 64])
+                latent_model_input = rearrange(latent_model_input, "b c f h w -> (b f) c h w")
                 noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample.to(
                     dtype=latents_dtype)
+                # torch.Size([2, 4, 16, 64, 64])
+                noise_pred = rearrange(noise_pred, "(b f) c h w -> b c f h w", f=video_length)
                 # noise_pred = []
                 # import pdb
                 # pdb.set_trace()

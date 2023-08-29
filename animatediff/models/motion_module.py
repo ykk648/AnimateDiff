@@ -60,6 +60,7 @@ class VanillaTemporalModule(nn.Module):
             temporal_position_encoding_max_len=24,
             temporal_attention_dim_div=1,
             zero_initialize=True,
+            video_length=16,
     ):
         super().__init__()
 
@@ -77,9 +78,10 @@ class VanillaTemporalModule(nn.Module):
         if zero_initialize:
             self.temporal_transformer.proj_out = zero_module(self.temporal_transformer.proj_out)
 
-    def forward(self, input_tensor, temb, encoder_hidden_states, attention_mask=None, anchor_frame_idx=None):
-        hidden_states = input_tensor
-        hidden_states = self.temporal_transformer(hidden_states, encoder_hidden_states, attention_mask)
+        self.video_length = video_length
+
+    def forward(self, hidden_states, temb, encoder_hidden_states, attention_mask=None, anchor_frame_idx=None):
+        hidden_states = self.temporal_transformer(hidden_states, encoder_hidden_states, attention_mask, self.video_length)
 
         output = hidden_states
         return output
@@ -134,10 +136,10 @@ class TemporalTransformer3DModel(nn.Module):
         )
         self.proj_out = nn.Linear(inner_dim, in_channels)
 
-    def forward(self, hidden_states, encoder_hidden_states=None, attention_mask=None):
-        assert hidden_states.dim() == 5, f"Expected hidden_states to have ndim=5, but got ndim={hidden_states.dim()}."
-        video_length = hidden_states.shape[2]
-        hidden_states = rearrange(hidden_states, "b c f h w -> (b f) c h w")
+    def forward(self, hidden_states, encoder_hidden_states=None, attention_mask=None, video_length=16):
+        # assert hidden_states.dim() == 5, f"Expected hidden_states to have ndim=5, but got ndim={hidden_states.dim()}."
+        # video_length = hidden_states.shape[1]
+        # hidden_states = rearrange(hidden_states, "b c f h w -> (b f) c h w")
 
         batch, channel, height, weight = hidden_states.shape
         residual = hidden_states
@@ -156,7 +158,7 @@ class TemporalTransformer3DModel(nn.Module):
         hidden_states = hidden_states.reshape(batch, height, weight, inner_dim).permute(0, 3, 1, 2).contiguous()
 
         output = hidden_states + residual
-        output = rearrange(output, "(b f) c h w -> b c f h w", f=video_length)
+        # output = rearrange(output, "(b f) c h w -> b c f h w", f=video_length)
         return output
 
 
