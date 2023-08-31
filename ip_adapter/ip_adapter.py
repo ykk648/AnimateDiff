@@ -74,6 +74,7 @@ class IPAdapter:
     def set_ip_adapter(self):
         unet = self.pipe.unet
         attn_procs = {}
+        print(f'IPAdapter find {len(unet.attn_processors.keys())} attn layers')
         for name in unet.attn_processors.keys():
             cross_attention_dim = None if name.endswith("attn1.processor") else unet.config.cross_attention_dim
             if name.startswith("mid_block"):
@@ -123,7 +124,8 @@ class IPAdapter:
         uncond_image_prompt_embeds = uncond_image_prompt_embeds.repeat(1, num_samples, 1)
         uncond_image_prompt_embeds = uncond_image_prompt_embeds.view(bs_embed * num_samples, seq_len, -1)
 
-        image_prompt_embeds = strength * image_prompt_embeds + (1 - strength) * uncond_image_prompt_embeds
+        if strength != 1:
+            image_prompt_embeds = strength * image_prompt_embeds + (1 - strength) * uncond_image_prompt_embeds
 
         with torch.inference_mode():
             prompt_embeds = self.pipe._encode_prompt(
