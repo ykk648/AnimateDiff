@@ -1,7 +1,7 @@
 # Adapted from https://github.com/huggingface/diffusers/blob/main/src/diffusers/pipelines/stable_diffusion/pipeline_stable_diffusion.py
 
 import inspect
-from typing import Callable, List, Optional, Union
+from typing import Callable, List, Optional, Union, Tuple, Any
 from dataclasses import dataclass
 
 import numpy as np
@@ -26,7 +26,15 @@ from diffusers.schedulers import (
     LMSDiscreteScheduler,
     PNDMScheduler,
 )
-from diffusers.utils import deprecate, logging, BaseOutput
+from diffusers.utils import (
+    is_accelerate_available,
+    is_accelerate_version,
+    is_compiled_module,
+    logging,
+    randn_tensor,
+    replace_example_docstring,
+    BaseOutput,
+)
 
 from einops import rearrange
 
@@ -41,7 +49,7 @@ class AnimationPipelineOutput(BaseOutput):
     videos: Union[torch.Tensor, np.ndarray]
 
 
-class AnimationPipeline_StableDiffusion(DiffusionPipeline, FromSingleFileMixin):
+class StableDiffusionAnimationPipeline(DiffusionPipeline, FromSingleFileMixin):
     _optional_components = []
 
     def __init__(
@@ -116,40 +124,66 @@ class AnimationPipeline_StableDiffusion(DiffusionPipeline, FromSingleFileMixin):
             tokenizer=tokenizer,
             unet=unet,
             scheduler=scheduler,
-            safety_checker=safety_checker,
+            # safety_checker=safety_checker,
         )
         self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
 
     def enable_vae_slicing(self):
+        r"""
+        Enable sliced VAE decoding. When this option is enabled, the VAE will split the input tensor in slices to
+        compute decoding in several steps. This is useful to save some memory and allow larger batch sizes.
+        """
         self.vae.enable_slicing()
 
     def disable_vae_slicing(self):
+        r"""
+        Disable sliced VAE decoding. If `enable_vae_slicing` was previously enabled, this method will go back to
+        computing decoding in one step.
+        """
         self.vae.disable_slicing()
 
-    def enable_sequential_cpu_offload(self, gpu_id=0):
-        if is_accelerate_available():
-            from accelerate import cpu_offload
+    def enable_vae_tiling(self):
+        r"""
+        Enable tiled VAE decoding. When this option is enabled, the VAE will split the input tensor into tiles to
+        compute decoding and encoding in several steps. This is useful for saving a large amount of memory and to allow
+        processing larger images.
+        """
+        self.vae.enable_tiling()
+
+    def disable_vae_tiling(self):
+        r"""
+        Disable tiled VAE decoding. If `enable_vae_tiling` was previously enabled, this method will go back to
+        computing decoding in one step.
+        """
+        self.vae.disable_tiling()
+
+    def enable_model_cpu_offload(self, gpu_id=0):
+        r"""
+        Offload all models to CPU to reduce memory usage with a low impact on performance. Moves one whole model at a
+        time to the GPU when its `forward` method is called, and the model remains in GPU until the next model runs.
+        Memory savings are lower than using `enable_sequential_cpu_offload`, but performance is much better due to the
+        iterative execution of the `unet`.
+        """
+        if is_accelerate_available() and is_accelerate_version(">=", "0.17.0.dev0"):
+            from accelerate import cpu_offload_with_hook
         else:
-            raise ImportError("Please install accelerate via `pip install accelerate`")
+            raise ImportError("`enable_model_cpu_offload` requires `accelerate v0.17.0` or higher.")
 
         device = torch.device(f"cuda:{gpu_id}")
 
-        for cpu_offloaded_model in [self.unet, self.text_encoder, self.vae]:
-            if cpu_offloaded_model is not None:
-                cpu_offload(cpu_offloaded_model, device)
+        if self.device.type != "cpu":
+            self.to("cpu", silence_dtype_warnings=True)
+            torch.cuda.empty_cache()  # otherwise we don't see the memory savings (but they probably exist)
 
-    @property
-    def _execution_device(self):
-        if self.device != torch.device("meta") or not hasattr(self.unet, "_hf_hook"):
-            return self.device
-        for module in self.unet.modules():
-            if (
-                    hasattr(module, "_hf_hook")
-                    and hasattr(module._hf_hook, "execution_device")
-                    and module._hf_hook.execution_device is not None
-            ):
-                return torch.device(module._hf_hook.execution_device)
-        return self.device
+        hook = None
+        for cpu_offloaded_model in [self.text_encoder, self.unet, self.vae]:
+            _, hook = cpu_offload_with_hook(cpu_offloaded_model, device, prev_module_hook=hook)
+
+        # if self.safety_checker is not None:
+        #     _, hook = cpu_offload_with_hook(self.safety_checker, device, prev_module_hook=hook)
+
+        # We'll offload the last model manually.
+        self.final_offload_hook = hook
 
     def _encode_prompt(self, prompt, device, num_videos_per_prompt, do_classifier_free_guidance, negative_prompt):
         batch_size = len(prompt) if isinstance(prompt, list) else 1
@@ -333,7 +367,11 @@ class AnimationPipeline_StableDiffusion(DiffusionPipeline, FromSingleFileMixin):
 
                 if timestep:
                     # ref diffusers img2img
-                    init_latents = init_latents.unsqueeze(2).repeat(1, 1, 16, 1, 1)
+                    init_latents = init_latents * 0.18215
+                    init_latents = init_latents.unsqueeze(2).repeat(1, 1, video_length, 1, 1)
+                    # noise_patten = [1, 1, 1, 1, 0.6, 0.6, 0.6, 0.6, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3]
+                    # for i in range(video_length):
+                    #     init_latents[:, :, i, :, :] = init_latents[:, :, i, :, :]*noise_patten[i]
                     # equal to "latents[:,:, i,:,:] = init_latents * 0.3259 + latents[:,:, i,:,:] * 0.9454"
                     latents = self.scheduler.add_noise(init_latents, latents, timestep)
 
@@ -346,28 +384,29 @@ class AnimationPipeline_StableDiffusion(DiffusionPipeline, FromSingleFileMixin):
                 # mask_weights = [keys.inpainting_weights_series[frame_idx] for frame_idx in range(video_length)]
                 # # [0.0, 0.3333333333333333, 0.6666666666666666, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.6666666666666667, 0.33333333333333337, 0.0, 0.0]
 
-                if init_latents is not None:
-
-                    # init_alpha = [0.1, 0.09, 0.08, 0.07, 0.06, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05,
-                    #               0.05, 0.05]
-
-                    init_alpha = kwargs['init_alpha']
-                    init_alpha_copy = kwargs['init_alpha']
-                    truncate_alpha = kwargs['truncate_alpha']  # hyper-parameters
-                    alpha_step = kwargs['alpha_step']  # hyper-parameters
-                    alpha_list = []
-                    for i in range(video_length):
-                        # # ref https://github.com/talesofai/AnimateDiff
-                        # init_alpha = (video_length - float(i)) / video_length / 30
-                        # latents[:, :, i, :, :] = init_latents * init_alpha + latents[:, :, i, :, :] * (1 - init_alpha)
-
-                        # truncate the alpha value
-                        if init_alpha != truncate_alpha and init_alpha != 0:
-                            init_alpha = round(init_alpha_copy - i * alpha_step, 2)  # decimal
-                        assert init_alpha >= 0
-                        alpha_list.append(init_alpha)
-                        latents[:, :, i, :, :] = init_latents * init_alpha + latents[:, :, i, :, :] * (1 - init_alpha)
-                    print(alpha_list)
+                # old noise policy ref talesofai
+                # if init_latents is not None:
+                #
+                #     # init_alpha = [0.1, 0.09, 0.08, 0.07, 0.06, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05,
+                #     #               0.05, 0.05]
+                #
+                #     init_alpha = kwargs['init_alpha']
+                #     init_alpha_copy = kwargs['init_alpha']
+                #     truncate_alpha = kwargs['truncate_alpha']  # hyper-parameters
+                #     alpha_step = kwargs['alpha_step']  # hyper-parameters
+                #     alpha_list = []
+                #     for i in range(video_length):
+                #         # # ref https://github.com/talesofai/AnimateDiff
+                #         # init_alpha = (video_length - float(i)) / video_length / 30
+                #         # latents[:, :, i, :, :] = init_latents * init_alpha + latents[:, :, i, :, :] * (1 - init_alpha)
+                #
+                #         # truncate the alpha value
+                #         if init_alpha != truncate_alpha and init_alpha != 0:
+                #             init_alpha = round(init_alpha_copy - i * alpha_step, 2)  # decimal
+                #         assert init_alpha >= 0
+                #         alpha_list.append(init_alpha)
+                #         latents[:, :, i, :, :] = init_latents * init_alpha + latents[:, :, i, :, :] * (1 - init_alpha)
+                #     print(alpha_list)
         else:
             if latents.shape != shape:
                 raise ValueError(f"Unexpected latents shape, got {latents.shape}, expected {shape}")
@@ -396,7 +435,7 @@ class AnimationPipeline_StableDiffusion(DiffusionPipeline, FromSingleFileMixin):
             init_image: str = None,
             height: Optional[int] = None,
             width: Optional[int] = None,
-            text_embeddings=None,
+            prompt_embeds=None,
             num_inference_steps: int = 50,
             guidance_scale: float = 7.5,
             negative_prompt: Optional[Union[str, List[str]]] = None,
@@ -432,12 +471,12 @@ class AnimationPipeline_StableDiffusion(DiffusionPipeline, FromSingleFileMixin):
         do_classifier_free_guidance = guidance_scale > 1.0
 
         # Encode input prompt
-        if text_embeddings is None:
+        if prompt_embeds is None:
             prompt = prompt if isinstance(prompt, list) else [prompt] * batch_size
             if negative_prompt is not None:
                 negative_prompt = negative_prompt if isinstance(negative_prompt, list) else [
                                                                                                 negative_prompt] * batch_size
-            text_embeddings = self._encode_prompt(
+            prompt_embeds = self._encode_prompt(
                 prompt, device, num_videos_per_prompt, do_classifier_free_guidance, negative_prompt
             )
 
@@ -448,9 +487,8 @@ class AnimationPipeline_StableDiffusion(DiffusionPipeline, FromSingleFileMixin):
         # ref diffusers img2img
         denoise_strength = kwargs['denoise_strength']  # hyper-parameters
         timesteps, num_inference_steps = self.get_timesteps(num_inference_steps, denoise_strength)
-
-        # noise_timestep = timesteps[0:1]
-        # noise_timestep = noise_timestep.repeat(batch_size * num_videos_per_prompt)
+        noise_timestep = timesteps[0:1]
+        noise_timestep = noise_timestep.repeat(batch_size * num_videos_per_prompt)
 
         # Prepare latent variables
         num_channels_latents = self.unet.config.in_channels
@@ -461,14 +499,14 @@ class AnimationPipeline_StableDiffusion(DiffusionPipeline, FromSingleFileMixin):
             video_length,
             height,
             width,
-            text_embeddings.dtype,
+            prompt_embeds.dtype,
             device,
             generator,
-            timestep=None,
+            timestep=noise_timestep,
             latents=latents,
-            init_alpha=kwargs['init_alpha'],
-            truncate_alpha=kwargs['truncate_alpha'],
-            alpha_step=kwargs['alpha_step'],
+            # init_alpha=kwargs['init_alpha'],
+            # truncate_alpha=kwargs['truncate_alpha'],
+            # alpha_step=kwargs['alpha_step'],
         )
         latents_dtype = latents.dtype
 
@@ -479,7 +517,7 @@ class AnimationPipeline_StableDiffusion(DiffusionPipeline, FromSingleFileMixin):
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
 
         # torch.Size([32, 77, 768])
-        text_embeddings = repeat(text_embeddings, 'b n c -> (b f) n c', f=video_length)
+        prompt_embeds = repeat(prompt_embeds, 'b n c -> (b f) n c', f=video_length)
 
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
@@ -491,17 +529,10 @@ class AnimationPipeline_StableDiffusion(DiffusionPipeline, FromSingleFileMixin):
                 # predict the noise residual
                 # torch.Size([32, 4, 64, 64])
                 latent_model_input = rearrange(latent_model_input, "b c f h w -> (b f) c h w")
-                noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample.to(
+                noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=prompt_embeds).sample.to(
                     dtype=latents_dtype)
                 # torch.Size([2, 4, 16, 64, 64])
                 noise_pred = rearrange(noise_pred, "(b f) c h w -> b c f h w", f=video_length)
-                # noise_pred = []
-                # import pdb
-                # pdb.set_trace()
-                # for batch_idx in range(latent_model_input.shape[0]):
-                #     noise_pred_single = self.unet(latent_model_input[batch_idx:batch_idx+1], t, encoder_hidden_states=text_embeddings[batch_idx:batch_idx+1]).sample.to(dtype=latents_dtype)
-                #     noise_pred.append(noise_pred_single)
-                # noise_pred = torch.cat(noise_pred)
 
                 # perform guidance
                 if do_classifier_free_guidance:

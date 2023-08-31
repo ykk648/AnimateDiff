@@ -7,13 +7,15 @@ from omegaconf import OmegaConf
 import torch
 import PIL
 import diffusers
-from diffusers import AutoencoderKL, DDIMScheduler
+from diffusers import AutoencoderKL, DDIMScheduler, ControlNetModel
 
 from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
 
 from animatediff.models.unet_2d_condition import AnimateDiffUNet2DConditionModel
-from animatediff.pipelines.pipeline_animation import AnimationPipeline_StableDiffusion
+from animatediff.pipelines.stablediffusion_animatediff_pipeline import StableDiffusionAnimationPipeline
+from animatediff.pipelines.stablediffusion_controlnet_animatediff_pipeline import \
+    StableDiffusionControlNetAnimateDiffPipeline
 from animatediff.utils.util import save_videos_grid
 from animatediff.utils.convert_from_ckpt import convert_ldm_unet_checkpoint, convert_ldm_clip_checkpoint, \
     convert_ldm_vae_checkpoint
@@ -22,7 +24,6 @@ from diffusers.utils.import_utils import is_xformers_available
 from ip_adapter.ip_adapter import IPAdapterPlus, IPAdapter
 from einops import rearrange, repeat
 
-import csv, pdb, glob
 from safetensors import safe_open
 import math
 from pathlib import Path
@@ -42,40 +43,78 @@ def main(args):
     samples = []
 
     sample_idx = 0
-    for model_idx, (config_key, model_config) in enumerate(list(config.items())):
 
+    for model_idx, (config_key, model_config) in enumerate(list(config.items())):
         motion_modules = model_config.motion_module
         motion_modules = [motion_modules] if isinstance(motion_modules, str) else list(motion_modules)
         for motion_module in motion_modules:
 
-            ### >>> create validation pipeline >>> ###
-            tokenizer = CLIPTokenizer.from_pretrained(args.pretrained_model_path, subfolder="tokenizer")
-            text_encoder = CLIPTextModel.from_pretrained(args.pretrained_model_path, subfolder="text_encoder")
-            vae = AutoencoderKL.from_pretrained(args.pretrained_model_path, subfolder="vae")
+            # Init unet
             unet = AnimateDiffUNet2DConditionModel.from_pretrained(args.pretrained_model_path, subfolder="unet",
-                                                           unet_additional_kwargs=OmegaConf.to_container(
-                                                               inference_config.unet_additional_kwargs))
+                                                                   unet_additional_kwargs=OmegaConf.to_container(
+                                                                       inference_config.unet_additional_kwargs))
 
-            if is_xformers_available():
-                unet.enable_xformers_memory_efficient_attention()
+            if model_config.enable_controlnet:
+                print('init controlnet model.')
+                controlnet = ControlNetModel.from_pretrained(
+                    f"{args.controlnet_model_dir}/{model_config.controlnet_name}",
+                    torch_dtype=torch.float32,
+                    use_safetensors=False
+                )
+                controlnet_condition_image = PIL.Image.open(model_config.controlnet_image)
+                pipeline = StableDiffusionControlNetAnimateDiffPipeline.from_pretrained(
+                    args.pretrained_model_path,
+                    unet=unet,
+                    controlnet=controlnet,
+                    feature_extractor=None,
+                    scheduler=DDIMScheduler(**OmegaConf.to_container(inference_config.noise_scheduler_kwargs)),
+                    safety_checker=None,
+                )
             else:
-                assert False
+                controlnet_condition_image = None
+                pipeline = StableDiffusionAnimationPipeline.from_pretrained(
+                    args.pretrained_model_path,
+                    unet=unet,
+                    scheduler=DDIMScheduler(**OmegaConf.to_container(inference_config.noise_scheduler_kwargs)),
+                )
 
-            pipeline = AnimationPipeline_StableDiffusion(
-                vae=vae, text_encoder=text_encoder, tokenizer=tokenizer, unet=unet,
-                scheduler=DDIMScheduler(**OmegaConf.to_container(inference_config.noise_scheduler_kwargs)),
-            ).to("cuda")
-
-            # 1. unet ckpt
-            # 1.1 motion module
+            # AnimateDiff Motion Module
             motion_module_state_dict = torch.load(motion_module, map_location="cpu")
             if "global_step" in motion_module_state_dict: func_args.update(
                 {"global_step": motion_module_state_dict["global_step"]})
             missing, unexpected = pipeline.unet.load_state_dict(motion_module_state_dict, strict=False)
             assert len(unexpected) == 0
 
-            # 1.2 T2I
-            if model_config.path != "":
+            # Must enable before IpAdapter init, don't know why
+            pipeline.enable_xformers_memory_efficient_attention()
+
+            # IPAdapter
+            if model_config.enable_ipadapter:
+                print('init IPAdapter model.')
+                ipap = IPAdapterPlus(pipeline, f'{args.ip_adapter_model_dir}/clip_image_encoder',
+                                     f'{args.ip_adapter_model_dir}/ip-adapter-plus_sd15.bin', "cuda", num_tokens=16)
+                # ipap = IPAdapter(pipeline, f'{args.ip_adapter_model_dir}/clip_image_encoder',
+                #                      f'{args.ip_adapter_model_dir}/ip-adapter_sd15.bin', "cuda")
+                pipeline = ipap.return_pipe()
+
+            pipeline.enable_model_cpu_offload()
+            # pipeline.to("cuda")
+
+            # Third party SD base model
+            if model_config.base != "":
+                print(f'Load model again from {model_config.base}')
+                base_state_dict = {}
+                with safe_open(model_config.base, framework="pt", device="cpu") as f:
+                    for key in f.keys():
+                        base_state_dict[key] = f.get_tensor(key)
+                converted_vae_checkpoint = convert_ldm_vae_checkpoint(base_state_dict, pipeline.vae.config)
+                pipeline.vae.load_state_dict(converted_vae_checkpoint)
+                converted_unet_checkpoint = convert_ldm_unet_checkpoint(base_state_dict, pipeline.unet.config)
+                pipeline.unet.load_state_dict(converted_unet_checkpoint, strict=False)
+                # pipeline.text_encoder = convert_ldm_clip_checkpoint(base_state_dict)
+
+            # LORA
+            if model_config.lora != "":
                 if model_config.path.endswith(".ckpt"):
                     state_dict = torch.load(model_config.path)
                     pipeline.unet.load_state_dict(state_dict)
@@ -86,41 +125,19 @@ def main(args):
                         for key in f.keys():
                             state_dict[key] = f.get_tensor(key)
 
-                    is_lora = all("lora" in k for k in state_dict.keys())
-                    if not is_lora:
-                        base_state_dict = state_dict
-                    else:
-                        base_state_dict = {}
-                        with safe_open(model_config.base, framework="pt", device="cpu") as f:
+                pipeline = convert_lora(pipeline, state_dict, alpha=model_config.lora_alpha)
+
+                # additional networks
+                if hasattr(model_config, 'additional_networks') and len(model_config.additional_networks) > 0:
+                    for lora_weights in model_config.additional_networks:
+                        add_state_dict = {}
+                        (lora_path, lora_alpha) = lora_weights.split(':')
+                        print(f"loading lora {lora_path} with weight {lora_alpha}")
+                        lora_alpha = float(lora_alpha.strip())
+                        with safe_open(lora_path.strip(), framework="pt", device="cpu") as f:
                             for key in f.keys():
-                                base_state_dict[key] = f.get_tensor(key)
-
-                    # pipeline.from_single_file(model_config.base, use_safetensors=True)
-                    # vae
-                    converted_vae_checkpoint = convert_ldm_vae_checkpoint(base_state_dict, pipeline.vae.config)
-                    pipeline.vae.load_state_dict(converted_vae_checkpoint)
-                    # unet
-                    converted_unet_checkpoint = convert_ldm_unet_checkpoint(base_state_dict, pipeline.unet.config)
-                    pipeline.unet.load_state_dict(converted_unet_checkpoint, strict=False)
-                    # text_model
-                    pipeline.text_encoder = convert_ldm_clip_checkpoint(base_state_dict)
-
-                    # import pdb
-                    # pdb.set_trace()
-                    if is_lora:
-                        pipeline = convert_lora(pipeline, state_dict, alpha=model_config.lora_alpha)
-
-                    # additional networks
-                    if hasattr(model_config, 'additional_networks') and len(model_config.additional_networks) > 0:
-                        for lora_weights in model_config.additional_networks:
-                            add_state_dict = {}
-                            (lora_path, lora_alpha) = lora_weights.split(':')
-                            print(f"loading lora {lora_path} with weight {lora_alpha}")
-                            lora_alpha = float(lora_alpha.strip())
-                            with safe_open(lora_path.strip(), framework="pt", device="cpu") as f:
-                                for key in f.keys():
-                                    add_state_dict[key] = f.get_tensor(key)
-                            pipeline = convert_lora(pipeline, add_state_dict, alpha=lora_alpha)
+                                add_state_dict[key] = f.get_tensor(key)
+                        pipeline = convert_lora(pipeline, add_state_dict, alpha=lora_alpha)
 
             ### <<< create validation pipeline <<< ###
 
@@ -132,18 +149,7 @@ def main(args):
             random_seeds = model_config.get("seed", [-1])
             random_seeds = [random_seeds] if isinstance(random_seeds, int) else list(random_seeds)
             random_seeds = random_seeds * len(prompts) if len(random_seeds) == 1 else random_seeds
-
             config[config_key].random_seed = []
-
-            if model_config.IPAdapter:
-                print('init IPAdapter model.')
-                ipap = IPAdapterPlus(pipeline, f'{args.ip_adapter_model_dir}/clip_image_encoder',
-                                     f'{args.ip_adapter_model_dir}/ip-adapter-plus_sd15.bin', "cuda", num_tokens=16)
-                # ipap = IPAdapter(pipeline, f'{args.ip_adapter_model_dir}/clip_image_encoder',
-                #                      f'{args.ip_adapter_model_dir}/ip-adapter_sd15.bin', "cuda")
-                pipeline = ipap.return_pipe()
-
-            pipeline.to("cuda")
 
             for prompt_idx, (prompt, n_prompt, random_seed) in enumerate(zip(prompts, n_prompts, random_seeds)):
 
@@ -157,20 +163,22 @@ def main(args):
                 print(f"current seed: {torch.initial_seed()}")
                 print(f"sampling {prompt} ...")
 
-                if model_config.IPAdapter:
-                    text_embeddings = ipap.get_prompts(prompt, n_prompt, PIL.Image.open(init_image), strength=model_config.ip_strength)
+                if model_config.enable_ipadapter:
+                    prompt_embeds = ipap.get_prompts(prompt, n_prompt, PIL.Image.open(init_image),
+                                                       strength=model_config.ip_strength)
                 else:
-                    text_embeddings = None
+                    prompt_embeds = None
 
                 sample = pipeline(
                     prompt,
                     init_image=init_image,
+                    image=controlnet_condition_image,
                     denoise_strength=model_config.denoise_strength,
-                    init_alpha=model_config.init_alpha,
-                    alpha_step=model_config.alpha_step,
-                    truncate_alpha=model_config.truncate_alpha,
+                    # init_alpha=model_config.init_alpha,
+                    # alpha_step=model_config.alpha_step,
+                    # truncate_alpha=model_config.truncate_alpha,
                     negative_prompt=n_prompt,
-                    text_embeddings=text_embeddings,
+                    prompt_embeds=prompt_embeds,
                     num_inference_steps=model_config.steps,
                     guidance_scale=model_config.guidance_scale,
                     width=args.W,
@@ -197,6 +205,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--pretrained_model_path", type=str, default="models/StableDiffusion/stable-diffusion-v1-5", )
     parser.add_argument("--ip_adapter_model_dir", type=str, default="models/IP_Adapter", )
+    parser.add_argument("--controlnet_model_dir", type=str, default="models/ControlNet", )
     parser.add_argument("--inference_config", type=str, default="configs/inference/inference.yaml")
     parser.add_argument("--config", type=str, required=True)
 
