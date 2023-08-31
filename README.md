@@ -1,12 +1,45 @@
 # AnimateDiff
 
+I may stop develop this repo right now, 
+AnimateDiff is not designed to do I2V mission at first, 
+I spent lots of time to read diffusers source codes, 
+this route maybe not the best compared to webui(ldm injection) at the end.
+
+Though it has potential, I believe new motion model trained on bigger-datasets/specific-motion will be released soon.
+
 ## Combining
 
 - [x] update diffusers to 0.20.1
 - [x] support [IP-Adapter](https://github.com/tencent-ailab/IP-Adapter)
 - [x] reconstruction codes and make animatediff a diffusers plugin like [sd-webui-animatediff](https://github.com/continue-revolution/sd-webui-animatediff)
-- [ ] controlnet from [TDS4874](https://github.com/TDS4874/sd-webui-controlnet/tree/animate-diff-support)
+- [x] controlnet from [TDS4874](https://github.com/TDS4874/sd-webui-controlnet/tree/animate-diff-support)
 - [x] solve/locate color degrade problem, check [TDS_ solution](https://note.com/tds_/n/n5aad9ef8a9b1), It seems that any color problems came from DDIM params.
+- [ ] controlnet reference mode
+- [ ] controlnet multi module mode
+- [ ] ddim inversion from [Tune-A-Video](https://github.com/showlab/Tune-A-Video)
+
+
+
+Ablation experiment：
+
+all / without denoise strength / without ipadapter / without controlnet(first frame)
+
+<table>
+    <tr>
+    <td><img src="__assets__/ipadapter/a_girl_in_the_wind.png"></td>
+    <td><img src="__assets__/images_with_control/results/girl_wind.gif"></td>
+    </tr>
+</table>
+<table>
+    <tr>
+    <td><img src="__assets__/ipadapter/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"></td>
+    <td><img src="__assets__/images_with_control/results/astronaut_mars.gif"></td>
+    </tr>
+</table>
+<p style="margin-left: 2em; margin-top: -1em">
+
+
+Below is old results from [old codes](https://github.com/ykk648/AnimateDiff/tree/bdfd4578f4db6f148d7533f4ddb209c6b4317c39)
 
 <table>
     <tr>
