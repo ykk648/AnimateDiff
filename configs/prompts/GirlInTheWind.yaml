@@ -1,6 +1,6 @@
-test:
+all:
   base: ""
-  path: ""
+  lora: ""
 
   init_image: "__assets__/ipadapter/a_girl_in_the_wind.png"
   denoise_strength: 0.6
@@ -8,12 +8,15 @@ test:
   alpha_step: 0.01
   truncate_alpha: 0.05
 
-  IPAdapter: true
+  enable_ipadapter: true
   ip_strength: 1
+
+  enable_controlnet: true
+  controlnet_name: control_v11p_sd15_normalbae
+  controlnet_image: "__assets__/images_with_control/a_girl_in_the_wind_normal.png"
 
   motion_module:
     - "models/Motion_Module/mm_sd_v14.ckpt"
-    - "models/Motion_Module/mm_sd_v15.ckpt"
 
   seed:           [-1]
   steps:          25
@@ -21,6 +24,93 @@ test:
   lora_alpha: 0.8
 
   prompt:
-    - "1girl, solo, shirt, realistic, black hair, looking at viewer, white shirt, collared shirt, smile, closed mouth, lips, portrait, black eyes, head tilt, medium hair, indoors, A girl in the wind，wink, Hair blown by the wind，best quality, high quality"
+    - "wind, wink, close eye, best quality, high quality"
   n_prompt:
-    - "monochrome, lowres, bad anatomy, worst quality, low quality"
+    - "monochrome, lowres, bad anatomy, blur, worst quality, low quality"
+without_denoise:
+  base: ""
+  lora: ""
+
+  init_image: "__assets__/ipadapter/a_girl_in_the_wind.png"
+  denoise_strength: 1
+  init_alpha: 0.1
+  alpha_step: 0.01
+  truncate_alpha: 0.05
+
+  enable_ipadapter: true
+  ip_strength: 1
+
+  enable_controlnet: true
+  controlnet_name: control_v11p_sd15_normalbae
+  controlnet_image: "__assets__/images_with_control/a_girl_in_the_wind_normal.png"
+
+  motion_module:
+    - "models/Motion_Module/mm_sd_v14.ckpt"
+
+  seed:           [-1]
+  steps:          25
+  guidance_scale: 7.5
+  lora_alpha: 0.8
+
+  prompt:
+    - "wind, wink, close eye, best quality, high quality"
+  n_prompt:
+    - "monochrome, lowres, bad anatomy, blur, worst quality, low quality"
+without_ipadapter:
+  base: ""
+  lora: ""
+
+  init_image: "__assets__/ipadapter/a_girl_in_the_wind.png"
+  denoise_strength: 0.6
+  init_alpha: 0.1
+  alpha_step: 0.01
+  truncate_alpha: 0.05
+
+  enable_ipadapter: false
+  ip_strength: 1
+
+  enable_controlnet: true
+  controlnet_name: control_v11p_sd15_normalbae
+  controlnet_image: "__assets__/images_with_control/a_girl_in_the_wind_normal.png"
+
+  motion_module:
+    - "models/Motion_Module/mm_sd_v14.ckpt"
+
+  seed:           [-1]
+  steps:          25
+  guidance_scale: 7.5
+  lora_alpha: 0.8
+
+  prompt:
+    - "wind, wink, close eye, best quality, high quality"
+  n_prompt:
+    - "monochrome, lowres, bad anatomy, blur, worst quality, low quality"
+without_controlnet:
+  base: ""
+  lora: ""
+
+  init_image: "__assets__/ipadapter/a_girl_in_the_wind.png"
+  denoise_strength: 0.6
+  init_alpha: 0.1
+  alpha_step: 0.01
+  truncate_alpha: 0.05
+
+  enable_ipadapter: true
+  ip_strength: 1
+
+  enable_controlnet: false
+  controlnet_name: control_v11p_sd15_normalbae
+  controlnet_image: "__assets__/images_with_control/a_girl_in_the_wind_normal.png"
+
+  motion_module:
+    - "models/Motion_Module/mm_sd_v14.ckpt"
+
+  seed:           [-1]
+  steps:          25
+  guidance_scale: 7.5
+  lora_alpha: 0.8
+
+  prompt:
+    - "wind, wink, close eye, best quality, high quality"
+  n_prompt:
+    - "monochrome, lowres, bad anatomy, blur, worst quality, low quality"
