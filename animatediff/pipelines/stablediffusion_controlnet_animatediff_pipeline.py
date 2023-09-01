@@ -313,7 +313,7 @@ class StableDiffusionControlNetAnimateDiffPipeline(DiffusionPipeline, TextualInv
         # video = self.vae.decode(latents).sample
         video = []
         for frame_idx in tqdm(range(latents.shape[0])):
-            video.append(self.vae.decode(latents[frame_idx:frame_idx + 1]).sample)
+            video.append(self.vae.decode(latents[frame_idx:frame_idx + 1].to(self.vae.device, dtype=self.vae.dtype)).sample)
         video = torch.cat(video)
         video = rearrange(video, "(b f) c h w -> b c f h w", f=video_length)
         video = (video / 2 + 0.5).clamp(0, 1)
@@ -570,7 +570,7 @@ class StableDiffusionControlNetAnimateDiffPipeline(DiffusionPipeline, TextualInv
                 init_latents = torch.cat(init_latents, dim=0)
                 # init_latents = init_latents * 0.18215
             else:
-                init_latents = self.vae.encode(image).latent_dist.sample(generator)
+                init_latents = self.vae.encode(image.to(device, dtype=self.vae.dtype)).latent_dist.sample(generator)
         else:
             init_latents = None
 
@@ -884,22 +884,22 @@ class StableDiffusionControlNetAnimateDiffPipeline(DiffusionPipeline, TextualInv
                     # Infered ControlNet only for the conditional batch.
                     # To apply the output of ControlNet to both the unconditional and conditional batches,
                     # add 0 to the unconditional batch to keep it unchanged.
-                    down_block_res_samples = [torch.cat([torch.zeros_like(d), d]) for d in down_block_res_samples]
-                    mid_block_res_sample = torch.cat([torch.zeros_like(mid_block_res_sample), mid_block_res_sample])
+                    down_block_res_samples = [torch.cat([torch.zeros_like(d), d].to(device, dtype=self.unet.dtype)) for d in down_block_res_samples]
+                    mid_block_res_sample = torch.cat([torch.zeros_like(mid_block_res_sample), mid_block_res_sample]).to(device, dtype=self.unet.dtype)
 
                 latent_model_input = rearrange(latent_model_input, "b c f h w -> (b f) c h w")
 
                 # predict the noise residual
                 # torch.Size([32, 4, 64, 64])
                 noise_pred = self.unet(
-                    latent_model_input,
+                    latent_model_input.to(device, dtype=self.unet.dtype),
                     t,
-                    encoder_hidden_states=prompt_embeds,
+                    encoder_hidden_states=prompt_embeds.to(device, dtype=self.unet.dtype),
                     cross_attention_kwargs=cross_attention_kwargs,
                     down_block_additional_residuals=down_block_res_samples,
                     mid_block_additional_residual=mid_block_res_sample,
                     return_dict=False,
-                    )[0].to(dtype=latents_dtype)
+                    )[0]
                 # torch.Size([2, 4, 16, 64, 64])
                 noise_pred = rearrange(noise_pred, "(b f) c h w -> b c f h w", f=video_length)
 

@@ -58,7 +58,7 @@ def main(args):
                 print('init controlnet model.')
                 controlnet = ControlNetModel.from_pretrained(
                     f"{args.controlnet_model_dir}/{model_config.controlnet_name}",
-                    torch_dtype=torch.float32,
+                    torch_dtype=args.dtype,
                     use_safetensors=False
                 )
                 controlnet_condition_image = PIL.Image.open(model_config.controlnet_image)
@@ -69,6 +69,7 @@ def main(args):
                     feature_extractor=None,
                     scheduler=DDIMScheduler(**OmegaConf.to_container(inference_config.noise_scheduler_kwargs)),
                     safety_checker=None,
+                    torch_dtype=args.dtype
                 )
             else:
                 controlnet_condition_image = None
@@ -76,6 +77,7 @@ def main(args):
                     args.pretrained_model_path,
                     unet=unet,
                     scheduler=DDIMScheduler(**OmegaConf.to_container(inference_config.noise_scheduler_kwargs)),
+                    torch_dtype=args.dtype
                 )
 
             # AnimateDiff Motion Module
@@ -207,6 +209,7 @@ if __name__ == "__main__":
     parser.add_argument("--ip_adapter_model_dir", type=str, default="models/IP_Adapter", )
     parser.add_argument("--controlnet_model_dir", type=str, default="models/ControlNet", )
     parser.add_argument("--inference_config", type=str, default="configs/inference/inference.yaml")
+    parser.add_argument("--dtype", type=torch.dtype, default=torch.float32)
     parser.add_argument("--config", type=str, required=True)
 
     parser.add_argument("--L", type=int, default=16)

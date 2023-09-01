@@ -281,7 +281,7 @@ class StableDiffusionAnimationPipeline(DiffusionPipeline, FromSingleFileMixin):
         # video = self.vae.decode(latents).sample
         video = []
         for frame_idx in tqdm(range(latents.shape[0])):
-            video.append(self.vae.decode(latents[frame_idx:frame_idx + 1]).sample)
+            video.append(self.vae.decode(latents[frame_idx:frame_idx + 1].to(self.vae.device, dtype=self.vae.dtype)).sample)
         video = torch.cat(video)
         video = rearrange(video, "(b f) c h w -> b c f h w", f=video_length)
         video = (video / 2 + 0.5).clamp(0, 1)
@@ -341,7 +341,7 @@ class StableDiffusionAnimationPipeline(DiffusionPipeline, FromSingleFileMixin):
                 ]
                 init_latents = torch.cat(init_latents, dim=0)
             else:
-                init_latents = self.vae.encode(image).latent_dist.sample(generator)
+                init_latents = self.vae.encode(image.to(device, dtype=self.vae.dtype)).latent_dist.sample(generator)
         else:
             init_latents = None
 
@@ -529,8 +529,11 @@ class StableDiffusionAnimationPipeline(DiffusionPipeline, FromSingleFileMixin):
                 # predict the noise residual
                 # torch.Size([32, 4, 64, 64])
                 latent_model_input = rearrange(latent_model_input, "b c f h w -> (b f) c h w")
-                noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=prompt_embeds).sample.to(
-                    dtype=latents_dtype)
+                noise_pred = self.unet(
+                    latent_model_input.to(device, dtype=self.unet.dtype),
+                    t,
+                    encoder_hidden_states=prompt_embeds.to(device, dtype=self.unet.dtype),
+                    ).sample.to(dtype=latents_dtype)
                 # torch.Size([2, 4, 16, 64, 64])
                 noise_pred = rearrange(noise_pred, "(b f) c h w -> b c f h w", f=video_length)
 
