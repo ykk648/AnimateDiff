@@ -14,10 +14,10 @@ Though it has potential, I believe new motion model trained on bigger-datasets/s
 - [x] reconstruction codes and make animatediff a diffusers plugin like [sd-webui-animatediff](https://github.com/continue-revolution/sd-webui-animatediff)
 - [x] controlnet from [TDS4874](https://github.com/TDS4874/sd-webui-controlnet/tree/animate-diff-support)
 - [x] solve/locate color degrade problem, check [TDS_ solution](https://note.com/tds_/n/n5aad9ef8a9b1), It seems that any color problems came from DDIM params.
-- [ ] controlnet reference mode
+- [x] controlnet reference mode
 - [ ] controlnet multi module mode
-- [ ] ddim inversion from [Tune-A-Video](https://github.com/showlab/Tune-A-Video)
-
+- [x] ddim inversion from [Tune-A-Video](https://github.com/showlab/Tune-A-Video)
+- [x] support [AnimateDiff v2](https://github.com/guoyww/AnimateDiff/commit/108921965da631be96cd5b6c6ea0c9bbb06ecf0b)
 
 
 Ablation experiment：

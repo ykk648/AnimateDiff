@@ -1,0 +1,104 @@
+all:
+  base: ""
+  lora: ""
+
+  init_image: "__assets__/ipadapter/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"
+  denoise_strength: 0.84
+
+  enable_ipadapter: false
+  ip_strength: 1
+
+  enable_controlnet: false
+  controlnet_name: reference
+  controlnet_image: "__assets__/ipadapter/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"
+
+  motion_module:
+    - "models/Motion_Module/mm_sd_v15_v2.ckpt"
+
+  seed:           [444264997]
+  steps:          25
+  guidance_scale: 7.5
+  lora_alpha: 0.8
+
+  prompt:
+    - "An astronaut is riding a horse on Mars"
+  n_prompt:
+    - "monochrome, lowres, bad anatomy, worst quality, low quality"
+without_denoise:
+  base: ""
+  lora: ""
+
+  init_image: "__assets__/ipadapter/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"
+  denoise_strength: 1
+
+  enable_ipadapter: true
+  ip_strength: 1
+
+  enable_controlnet: true
+  controlnet_name: reference
+  controlnet_image: "__assets__/ipadapter/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"
+
+  motion_module:
+    - "models/Motion_Module/mm_sd_v15_v2.ckpt"
+
+  seed:           [444264997]
+  steps:          25
+  guidance_scale: 7.5
+  lora_alpha: 0.8
+
+  prompt:
+    - "An astronaut is riding a horse on Mars"
+  n_prompt:
+    - "monochrome, lowres, bad anatomy, worst quality, low quality"
+without_ipadapter:
+  base: ""
+  lora: ""
+
+  init_image: "__assets__/ipadapter/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"
+  denoise_strength: 0.84
+
+  enable_ipadapter: false
+  ip_strength: 1
+
+  enable_controlnet: true
+  controlnet_name: reference
+  controlnet_image: "__assets__/ipadapter/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"
+
+  motion_module:
+    - "models/Motion_Module/mm_sd_v15_v2.ckpt"
+
+  seed:           [444264997]
+  steps:          25
+  guidance_scale: 7.5
+  lora_alpha: 0.8
+
+  prompt:
+    - "An astronaut is riding a horse on Mars"
+  n_prompt:
+    - "monochrome, lowres, bad anatomy, worst quality, low quality"
+without_controlnet:
+  base: ""
+  lora: ""
+
+  init_image: "__assets__/ipadapter/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"
+  denoise_strength: 0.84
+
+  enable_ipadapter: true
+  ip_strength: 1
+
+  enable_controlnet: true
+  controlnet_name: reference
+  controlnet_image: "__assets__/ipadapter/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"
+
+  motion_module:
+    - "models/Motion_Module/mm_sd_v15_v2.ckpt"
+
+  seed:           [444264997]
+  steps:          25
+  guidance_scale: 7.5
+  lora_alpha: 0.8
+
+  prompt:
+    - "An astronaut is riding a horse on Mars"
+  n_prompt:
+    - "monochrome, lowres, bad anatomy, worst quality, low quality"

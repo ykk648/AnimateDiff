@@ -71,7 +71,7 @@ def main(args):
                     safety_checker=None,
                     torch_dtype=args.dtype
                 )
-            elif model_config.controlnet_name=='reference':
+            elif model_config.enable_controlnet and model_config.controlnet_name=='reference':
                 print('init controlnet reference pipeline.')
                 controlnet_condition_image = PIL.Image.open(model_config.controlnet_image)
                 pipeline = StableDiffusionControlNetReferenceAnimateDiffPipeline.from_pretrained(
@@ -222,7 +222,7 @@ if __name__ == "__main__":
     parser.add_argument("--pretrained_model_path", type=str, default="models/StableDiffusion/stable-diffusion-v1-5", )
     parser.add_argument("--ip_adapter_model_dir", type=str, default="models/IP_Adapter", )
     parser.add_argument("--controlnet_model_dir", type=str, default="models/ControlNet", )
-    parser.add_argument("--inference_config", type=str, default="configs/inference/inference.yaml")
+    parser.add_argument("--inference_config", type=str, default="configs/inference/inference-v2.yaml")
     parser.add_argument("--dtype", type=torch.dtype, default=torch.float32)
     parser.add_argument("--config", type=str, required=True)
 
