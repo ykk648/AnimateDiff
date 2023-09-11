@@ -14,8 +14,8 @@ from transformers import CLIPTextModel, CLIPTokenizer
 
 from animatediff.models.unet_2d_condition import AnimateDiffUNet2DConditionModel
 from animatediff.pipelines.stablediffusion_animatediff_pipeline import StableDiffusionAnimationPipeline
-from animatediff.pipelines.stablediffusion_controlnet_animatediff_pipeline import \
-    StableDiffusionControlNetAnimateDiffPipeline
+from animatediff.pipelines.stablediffusion_controlnet_animatediff_pipeline import StableDiffusionControlNetAnimateDiffPipeline
+from animatediff.pipelines.stablediffusion_controlnet_reference_animatediff_pipeline import StableDiffusionControlNetReferenceAnimateDiffPipeline
 from animatediff.utils.util import save_videos_grid
 from animatediff.utils.convert_from_ckpt import convert_ldm_unet_checkpoint, convert_ldm_clip_checkpoint, \
     convert_ldm_vae_checkpoint
@@ -54,7 +54,7 @@ def main(args):
                                                                    unet_additional_kwargs=OmegaConf.to_container(
                                                                        inference_config.unet_additional_kwargs))
 
-            if model_config.enable_controlnet:
+            if model_config.enable_controlnet and model_config.controlnet_name!='reference':
                 print('init controlnet model.')
                 controlnet = ControlNetModel.from_pretrained(
                     f"{args.controlnet_model_dir}/{model_config.controlnet_name}",
@@ -70,6 +70,18 @@ def main(args):
                     scheduler=DDIMScheduler(**OmegaConf.to_container(inference_config.noise_scheduler_kwargs)),
                     safety_checker=None,
                     torch_dtype=args.dtype
+                )
+            elif model_config.controlnet_name=='reference':
+                print('init controlnet reference pipeline.')
+                controlnet_condition_image = PIL.Image.open(model_config.controlnet_image)
+                pipeline = StableDiffusionControlNetReferenceAnimateDiffPipeline.from_pretrained(
+                    args.pretrained_model_path,
+                    unet=unet,
+                    controlnet=None,
+                    feature_extractor=None,
+                    scheduler=DDIMScheduler(**OmegaConf.to_container(inference_config.noise_scheduler_kwargs)),
+                    safety_checker=None,
+                    torch_dtype=args.dtype,
                 )
             else:
                 controlnet_condition_image = None
@@ -183,6 +195,8 @@ def main(args):
                     prompt_embeds=prompt_embeds,
                     num_inference_steps=model_config.steps,
                     guidance_scale=model_config.guidance_scale,
+                    reference_attn=False,
+                    reference_adain=True,
                     width=args.W,
                     height=args.H,
                     video_length=args.L,
