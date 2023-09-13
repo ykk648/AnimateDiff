@@ -17,7 +17,7 @@ def is_torch2_available():
     return hasattr(F, "scaled_dot_product_attention")
 
 
-if is_torch2_available:
+if is_torch2_available():
     from .attention_processor import IPAttnProcessor2_0 as IPAttnProcessor, AttnProcessor2_0 as AttnProcessor
 else:
     from .attention_processor import IPAttnProcessor, AttnProcessor
