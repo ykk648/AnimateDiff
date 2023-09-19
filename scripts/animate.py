@@ -129,13 +129,14 @@ def main(args):
 
             # LORA
             if model_config.lora != "":
-                if model_config.path.endswith(".ckpt"):
-                    state_dict = torch.load(model_config.path)
+                print(f'Load lora from {model_config.lora}')
+                if model_config.lora.endswith(".ckpt"):
+                    state_dict = torch.load(model_config.lora)
                     pipeline.unet.load_state_dict(state_dict)
 
-                elif model_config.path.endswith(".safetensors"):
+                elif model_config.lora.endswith(".safetensors"):
                     state_dict = {}
-                    with safe_open(model_config.path, framework="pt", device="cpu") as f:
+                    with safe_open(model_config.lora, framework="pt", device="cpu") as f:
                         for key in f.keys():
                             state_dict[key] = f.get_tensor(key)
 
