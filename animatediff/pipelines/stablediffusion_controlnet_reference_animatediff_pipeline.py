@@ -71,7 +71,7 @@ class StableDiffusionControlNetReferenceAnimateDiffPipeline(StableDiffusionContr
             ]
             ref_image_latents = torch.cat(ref_image_latents, dim=0)
         else:
-            ref_image_latents = self.vae.encode(refimage).latent_dist.sample(generator=generator)
+            ref_image_latents = self.vae.encode(refimage.to(device, dtype=self.vae.dtype)).latent_dist.sample(generator=generator)
         ref_image_latents = self.vae.config.scaling_factor * ref_image_latents
 
         # duplicate mask and ref_image_latents for each generation per prompt, using mps friendly method
