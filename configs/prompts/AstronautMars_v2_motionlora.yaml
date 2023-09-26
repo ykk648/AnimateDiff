@@ -36,7 +36,7 @@ zoom_in:
   denoise_strength: 0.84
 
   motion_module_lora_configs:
-    - path:  "models/MotionLoRA/v2_lora_ZoomOut.ckpt"
+    - path:  "models/MotionLoRA/v2_lora_ZoomIn.ckpt"
       alpha: 1.0
 
   enable_ipadapter: true

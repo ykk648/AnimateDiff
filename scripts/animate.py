@@ -239,7 +239,7 @@ if __name__ == "__main__":
     parser.add_argument("--pretrained_model_path", type=str, default="models/StableDiffusion/stable-diffusion-v1-5", )
     parser.add_argument("--ip_adapter_model_dir", type=str, default="models/IP_Adapter", )
     parser.add_argument("--controlnet_model_dir", type=str, default="models/ControlNet", )
-    parser.add_argument("--inference_config", type=str, default="configs/inference/inference-v2.yaml")
+    parser.add_argument("--inference_config", type=str, default="configs/inference/inference.yaml")
     parser.add_argument("--dtype", type=torch.dtype, default=torch.float32)
     parser.add_argument("--config", type=str, required=True)
 

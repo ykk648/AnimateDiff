@@ -33,8 +33,7 @@ Zoom In / Zoom Out
 <table>
     <tr>
     <td><img src="__assets__/ipadapter/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"></td>
-    <td><img src="__assets__/motion_lora/astronaut_zoom_in.gif"></td>
-    <td><img src="__assets__/motion_lora/astronaut_zoom_out.gif"></td>
+    <td><img src="__assets__/motion_lora/astronaut_zoom_out_in.gif"></td>
     </tr>
 </table>
 <p style="margin-left: 2em; margin-top: -1em">
