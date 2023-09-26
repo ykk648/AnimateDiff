@@ -46,7 +46,7 @@ from einops import rearrange
 
 from ..models.unet_2d_blocks import CrossAttnDownBlock2D, CrossAttnUpBlock2D, DownBlock2D, UpBlock2D
 from ..models.unet_2d_condition import AnimateDiffUNet2DConditionOutput
-from ..utils.util import preprocess_image
+from ..utils.latents_maker import prepare_latents
 from .stablediffusion_controlnet_animatediff_pipeline import StableDiffusionControlNetAnimateDiffPipeline, StableDiffusionControlNetAnimateDiffPipelineOutput
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -229,7 +229,7 @@ class StableDiffusionControlNetReferenceAnimateDiffPipeline(StableDiffusionContr
 
         # 7. Prepare latent variables
         num_channels_latents = self.unet.config.in_channels
-        latents = self.prepare_latents(
+        latents = prepare_latents(self,
             init_image,
             batch_size * num_videos_per_prompt,
             num_channels_latents,

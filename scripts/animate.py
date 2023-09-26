@@ -14,12 +14,14 @@ from transformers import CLIPTextModel, CLIPTokenizer
 
 from animatediff.models.unet_2d_condition import AnimateDiffUNet2DConditionModel
 from animatediff.pipelines.stablediffusion_animatediff_pipeline import StableDiffusionAnimationPipeline
-from animatediff.pipelines.stablediffusion_controlnet_animatediff_pipeline import StableDiffusionControlNetAnimateDiffPipeline
-from animatediff.pipelines.stablediffusion_controlnet_reference_animatediff_pipeline import StableDiffusionControlNetReferenceAnimateDiffPipeline
+from animatediff.pipelines.stablediffusion_controlnet_animatediff_pipeline import \
+    StableDiffusionControlNetAnimateDiffPipeline
+from animatediff.pipelines.stablediffusion_controlnet_reference_animatediff_pipeline import \
+    StableDiffusionControlNetReferenceAnimateDiffPipeline
 from animatediff.utils.util import save_videos_grid
 from animatediff.utils.convert_from_ckpt import convert_ldm_unet_checkpoint, convert_ldm_clip_checkpoint, \
     convert_ldm_vae_checkpoint
-from animatediff.utils.convert_lora_safetensor_to_diffusers import convert_lora
+from animatediff.utils.convert_lora_safetensor_to_diffusers import convert_lora, convert_motion_lora_ckpt_to_diffusers
 from diffusers.utils.import_utils import is_xformers_available
 from ip_adapter.ip_adapter import IPAdapterPlus, IPAdapter
 from einops import rearrange, repeat
@@ -30,10 +32,127 @@ from pathlib import Path
 import shutil
 
 
-def main(args):
-    *_, func_args = inspect.getargvalues(inspect.currentframe())
-    func_args = dict(func_args)
+def pipeline_loading(motion_module, model_config, inference_config):
+    # Init unet
+    unet = AnimateDiffUNet2DConditionModel.from_pretrained(args.pretrained_model_path, subfolder="unet",
+                                                           unet_additional_kwargs=OmegaConf.to_container(
+                                                               inference_config.unet_additional_kwargs))
 
+    if model_config.enable_controlnet and model_config.controlnet_name != 'reference':
+        print('init controlnet model.')
+        controlnet = ControlNetModel.from_pretrained(
+            f"{args.controlnet_model_dir}/{model_config.controlnet_name}",
+            torch_dtype=args.dtype,
+            use_safetensors=False
+        )
+        controlnet_condition_image = PIL.Image.open(model_config.controlnet_image)
+        pipeline = StableDiffusionControlNetAnimateDiffPipeline.from_pretrained(
+            args.pretrained_model_path,
+            unet=unet,
+            controlnet=controlnet,
+            feature_extractor=None,
+            scheduler=DDIMScheduler(**OmegaConf.to_container(inference_config.noise_scheduler_kwargs)),
+            safety_checker=None,
+            torch_dtype=args.dtype
+        )
+    elif model_config.enable_controlnet and model_config.controlnet_name == 'reference':
+        print('init controlnet reference pipeline.')
+        controlnet_condition_image = PIL.Image.open(model_config.controlnet_image)
+        pipeline = StableDiffusionControlNetReferenceAnimateDiffPipeline.from_pretrained(
+            args.pretrained_model_path,
+            unet=unet,
+            controlnet=None,
+            feature_extractor=None,
+            scheduler=DDIMScheduler(**OmegaConf.to_container(inference_config.noise_scheduler_kwargs)),
+            safety_checker=None,
+            torch_dtype=args.dtype,
+        )
+    else:
+        controlnet_condition_image = None
+        pipeline = StableDiffusionAnimationPipeline.from_pretrained(
+            args.pretrained_model_path,
+            unet=unet,
+            scheduler=DDIMScheduler(**OmegaConf.to_container(inference_config.noise_scheduler_kwargs)),
+            torch_dtype=args.dtype
+        )
+
+    # AnimateDiff Motion Module
+    motion_module_state_dict = torch.load(motion_module, map_location="cpu")
+    missing, unexpected = pipeline.unet.load_state_dict(motion_module_state_dict, strict=False)
+    assert len(unexpected) == 0
+
+    # Must enable before IpAdapter init, don't know why
+    pipeline.enable_xformers_memory_efficient_attention()
+
+    # IPAdapter
+    if model_config.enable_ipadapter:
+        print('init IPAdapter model.')
+        ipap = IPAdapterPlus(pipeline, f'{args.ip_adapter_model_dir}/clip_image_encoder',
+                             f'{args.ip_adapter_model_dir}/ip-adapter-plus_sd15.bin', "cuda", num_tokens=16)
+        # ipap = IPAdapter(pipeline, f'{args.ip_adapter_model_dir}/clip_image_encoder',
+        #                      f'{args.ip_adapter_model_dir}/ip-adapter_sd15.bin', "cuda")
+        pipeline = ipap.return_pipe()
+    else:
+        ipap = None
+
+    pipeline.enable_model_cpu_offload()
+    # pipeline.to("cuda")
+
+    # Third party SD base model
+    if model_config.base != "":
+        print(f'Load model again from {model_config.base}')
+        base_state_dict = {}
+        with safe_open(model_config.base, framework="pt", device="cpu") as f:
+            for key in f.keys():
+                base_state_dict[key] = f.get_tensor(key)
+        converted_vae_checkpoint = convert_ldm_vae_checkpoint(base_state_dict, pipeline.vae.config)
+        pipeline.vae.load_state_dict(converted_vae_checkpoint)
+        converted_unet_checkpoint = convert_ldm_unet_checkpoint(base_state_dict, pipeline.unet.config)
+        pipeline.unet.load_state_dict(converted_unet_checkpoint, strict=False)
+        # pipeline.text_encoder = convert_ldm_clip_checkpoint(base_state_dict)
+
+    # LORA
+    if model_config.lora != "":
+        print(f'Load lora from {model_config.lora}')
+        if model_config.lora.endswith(".ckpt"):
+            state_dict = torch.load(model_config.lora)
+            pipeline.unet.load_state_dict(state_dict)
+
+        elif model_config.lora.endswith(".safetensors"):
+            state_dict = {}
+            with safe_open(model_config.lora, framework="pt", device="cpu") as f:
+                for key in f.keys():
+                    state_dict[key] = f.get_tensor(key)
+
+        pipeline = convert_lora(pipeline, state_dict, alpha=model_config.lora_alpha)
+
+        # additional networks
+        if hasattr(model_config, 'additional_networks') and len(model_config.additional_networks) > 0:
+            for lora_weights in model_config.additional_networks:
+                add_state_dict = {}
+                (lora_path, lora_alpha) = lora_weights.split(':')
+                print(f"loading lora {lora_path} with weight {lora_alpha}")
+                lora_alpha = float(lora_alpha.strip())
+                with safe_open(lora_path.strip(), framework="pt", device="cpu") as f:
+                    for key in f.keys():
+                        add_state_dict[key] = f.get_tensor(key)
+                pipeline = convert_lora(pipeline, add_state_dict, alpha=lora_alpha)
+
+    # motion LORA
+    if hasattr(model_config, 'motion_module_lora_configs'):
+        for motion_module_lora_config in model_config.motion_module_lora_configs:
+            path, alpha = motion_module_lora_config["path"], motion_module_lora_config["alpha"]
+            print(f"load motion LoRA from {path}")
+    
+            motion_lora_state_dict = torch.load(path, map_location="cpu")
+            motion_lora_state_dict = motion_lora_state_dict[
+                "state_dict"] if "state_dict" in motion_lora_state_dict else motion_lora_state_dict
+
+            pipeline = convert_motion_lora_ckpt_to_diffusers(pipeline, motion_lora_state_dict, alpha)
+    return pipeline, ipap, controlnet_condition_image
+
+
+def main(args):
     time_str = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
     savedir = f"samples/{Path(args.config).stem}-{time_str}"
     os.makedirs(savedir)
@@ -49,110 +168,7 @@ def main(args):
         motion_modules = [motion_modules] if isinstance(motion_modules, str) else list(motion_modules)
         for motion_module in motion_modules:
 
-            # Init unet
-            unet = AnimateDiffUNet2DConditionModel.from_pretrained(args.pretrained_model_path, subfolder="unet",
-                                                                   unet_additional_kwargs=OmegaConf.to_container(
-                                                                       inference_config.unet_additional_kwargs))
-
-            if model_config.enable_controlnet and model_config.controlnet_name!='reference':
-                print('init controlnet model.')
-                controlnet = ControlNetModel.from_pretrained(
-                    f"{args.controlnet_model_dir}/{model_config.controlnet_name}",
-                    torch_dtype=args.dtype,
-                    use_safetensors=False
-                )
-                controlnet_condition_image = PIL.Image.open(model_config.controlnet_image)
-                pipeline = StableDiffusionControlNetAnimateDiffPipeline.from_pretrained(
-                    args.pretrained_model_path,
-                    unet=unet,
-                    controlnet=controlnet,
-                    feature_extractor=None,
-                    scheduler=DDIMScheduler(**OmegaConf.to_container(inference_config.noise_scheduler_kwargs)),
-                    safety_checker=None,
-                    torch_dtype=args.dtype
-                )
-            elif model_config.enable_controlnet and model_config.controlnet_name=='reference':
-                print('init controlnet reference pipeline.')
-                controlnet_condition_image = PIL.Image.open(model_config.controlnet_image)
-                pipeline = StableDiffusionControlNetReferenceAnimateDiffPipeline.from_pretrained(
-                    args.pretrained_model_path,
-                    unet=unet,
-                    controlnet=None,
-                    feature_extractor=None,
-                    scheduler=DDIMScheduler(**OmegaConf.to_container(inference_config.noise_scheduler_kwargs)),
-                    safety_checker=None,
-                    torch_dtype=args.dtype,
-                )
-            else:
-                controlnet_condition_image = None
-                pipeline = StableDiffusionAnimationPipeline.from_pretrained(
-                    args.pretrained_model_path,
-                    unet=unet,
-                    scheduler=DDIMScheduler(**OmegaConf.to_container(inference_config.noise_scheduler_kwargs)),
-                    torch_dtype=args.dtype
-                )
-
-            # AnimateDiff Motion Module
-            motion_module_state_dict = torch.load(motion_module, map_location="cpu")
-            if "global_step" in motion_module_state_dict: func_args.update(
-                {"global_step": motion_module_state_dict["global_step"]})
-            missing, unexpected = pipeline.unet.load_state_dict(motion_module_state_dict, strict=False)
-            assert len(unexpected) == 0
-
-            # Must enable before IpAdapter init, don't know why
-            pipeline.enable_xformers_memory_efficient_attention()
-
-            # IPAdapter
-            if model_config.enable_ipadapter:
-                print('init IPAdapter model.')
-                ipap = IPAdapterPlus(pipeline, f'{args.ip_adapter_model_dir}/clip_image_encoder',
-                                     f'{args.ip_adapter_model_dir}/ip-adapter-plus_sd15.bin', "cuda", num_tokens=16)
-                # ipap = IPAdapter(pipeline, f'{args.ip_adapter_model_dir}/clip_image_encoder',
-                #                      f'{args.ip_adapter_model_dir}/ip-adapter_sd15.bin', "cuda")
-                pipeline = ipap.return_pipe()
-
-            pipeline.enable_model_cpu_offload()
-            # pipeline.to("cuda")
-
-            # Third party SD base model
-            if model_config.base != "":
-                print(f'Load model again from {model_config.base}')
-                base_state_dict = {}
-                with safe_open(model_config.base, framework="pt", device="cpu") as f:
-                    for key in f.keys():
-                        base_state_dict[key] = f.get_tensor(key)
-                converted_vae_checkpoint = convert_ldm_vae_checkpoint(base_state_dict, pipeline.vae.config)
-                pipeline.vae.load_state_dict(converted_vae_checkpoint)
-                converted_unet_checkpoint = convert_ldm_unet_checkpoint(base_state_dict, pipeline.unet.config)
-                pipeline.unet.load_state_dict(converted_unet_checkpoint, strict=False)
-                # pipeline.text_encoder = convert_ldm_clip_checkpoint(base_state_dict)
-
-            # LORA
-            if model_config.lora != "":
-                print(f'Load lora from {model_config.lora}')
-                if model_config.lora.endswith(".ckpt"):
-                    state_dict = torch.load(model_config.lora)
-                    pipeline.unet.load_state_dict(state_dict)
-
-                elif model_config.lora.endswith(".safetensors"):
-                    state_dict = {}
-                    with safe_open(model_config.lora, framework="pt", device="cpu") as f:
-                        for key in f.keys():
-                            state_dict[key] = f.get_tensor(key)
-
-                pipeline = convert_lora(pipeline, state_dict, alpha=model_config.lora_alpha)
-
-                # additional networks
-                if hasattr(model_config, 'additional_networks') and len(model_config.additional_networks) > 0:
-                    for lora_weights in model_config.additional_networks:
-                        add_state_dict = {}
-                        (lora_path, lora_alpha) = lora_weights.split(':')
-                        print(f"loading lora {lora_path} with weight {lora_alpha}")
-                        lora_alpha = float(lora_alpha.strip())
-                        with safe_open(lora_path.strip(), framework="pt", device="cpu") as f:
-                            for key in f.keys():
-                                add_state_dict[key] = f.get_tensor(key)
-                        pipeline = convert_lora(pipeline, add_state_dict, alpha=lora_alpha)
+            pipeline, ipap, controlnet_condition_image = pipeline_loading(motion_module, model_config, inference_config)
 
             ### <<< create validation pipeline <<< ###
 
@@ -180,7 +196,7 @@ def main(args):
 
                 if model_config.enable_ipadapter:
                     prompt_embeds = ipap.get_prompts(prompt, n_prompt, PIL.Image.open(init_image),
-                                                       strength=model_config.ip_strength)
+                                                     strength=model_config.ip_strength)
                 else:
                     prompt_embeds = None
 
@@ -196,8 +212,8 @@ def main(args):
                     prompt_embeds=prompt_embeds,
                     num_inference_steps=model_config.steps,
                     guidance_scale=model_config.guidance_scale,
-                    reference_attn=False,
-                    reference_adain=True,
+                    reference_attn=True,
+                    reference_adain=False,
                     width=args.W,
                     height=args.H,
                     video_length=args.L,
