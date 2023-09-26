@@ -1,13 +1,17 @@
 # AnimateDiff
 
-I may stop develop this repo right now, 
+~~I may stop develop this repo right now,~~ 
 AnimateDiff is not designed to do I2V mission at first, 
 I spent lots of time to read diffusers source codes, 
 this route maybe not the best compared to webui(ldm injection) at the end.
 
 Though it has potential, I believe new motion model trained on bigger-datasets/specific-motion will be released soon.
 
-## Combining
+Still under development.
+
+
+
+## TODO
 
 - [x] update diffusers to 0.20.1
 - [x] support [IP-Adapter](https://github.com/tencent-ailab/IP-Adapter)
@@ -18,9 +22,26 @@ Though it has potential, I believe new motion model trained on bigger-datasets/s
 - [ ] controlnet multi module mode
 - [x] ddim inversion from [Tune-A-Video](https://github.com/showlab/Tune-A-Video)
 - [x] support [AnimateDiff v2](https://github.com/guoyww/AnimateDiff/commit/108921965da631be96cd5b6c6ea0c9bbb06ecf0b)
+- [x] support [AnimateDiff MotionLoRA](https://github.com/guoyww/AnimateDiff/tree/f82a8367ec1471711d342febd8cbef72e4670a12#features)
 
+## Experience
 
-Ablation experiment：
+### MotionLoRA I2V results:   
+
+Zoom In / Zoom Out
+
+<table>
+    <tr>
+    <td><img src="__assets__/ipadapter/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"></td>
+    <td><img src="__assets__/motion_lora/astronaut_zoom_in.gif"></td>
+    <td><img src="__assets__/motion_lora/astronaut_zoom_out.gif"></td>
+    </tr>
+</table>
+<p style="margin-left: 2em; margin-top: -1em">
+
+### Ablation experiment (controlnet/ipadapter)
+
+results from [this old branch](https://github.com/ykk648/AnimateDiff/tree/5bdbfeb3e92dee379f9c543930aa591f89a5b04f)
 
 all / without denoise strength / without ipadapter / without controlnet(first frame)
 
@@ -39,7 +60,9 @@ all / without denoise strength / without ipadapter / without controlnet(first fr
 <p style="margin-left: 2em; margin-top: -1em">
 
 
-Below is old results from [old codes](https://github.com/ykk648/AnimateDiff/tree/bdfd4578f4db6f148d7533f4ddb209c6b4317c39)
+### Origin SD1.5 I2V attempt
+
+Below is old results from [this ols branch](https://github.com/ykk648/AnimateDiff/tree/bdfd4578f4db6f148d7533f4ddb209c6b4317c39)
 
 <table>
     <tr>
@@ -66,7 +89,7 @@ Drop local training scripts, using authors repo to do training experiences(I2V).
 First, make image injection refer [IP-Adapter](https://github.com/tencent-ailab/IP-Adapter).
 Already test in [AI_power](https://github.com/ykk648/AI_power/blob/main/sd_lib/clip_encoder.py).
 
-## My Experience
+## First I2V attempt
 
 - 23.8.8: Here are some results of mine, ref [talesofai's folk](https://github.com/talesofai/AnimateDiff/blob/04b2715b39d4a02334b08cb6ee3dfe79f0a6cd7c/animatediff/pipelines/pipeline_animation.py#L288) and [diffusers](https://github.com/huggingface/diffusers/blob/main/src/diffusers/pipelines/deepfloyd_if/pipeline_if_img2img.py) to do image latent injection.
 
