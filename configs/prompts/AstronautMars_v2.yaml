@@ -5,10 +5,10 @@ all:
   init_image: "__assets__/ipadapter/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"
   denoise_strength: 0.84
 
-  enable_ipadapter: false
+  enable_ipadapter: true
   ip_strength: 1
 
-  enable_controlnet: false
+  enable_controlnet: true
   controlnet_name: reference
   controlnet_image: "__assets__/ipadapter/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"
 
