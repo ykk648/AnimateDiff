@@ -5,11 +5,13 @@
 import PIL
 from animatediff.utils.util import preprocess_image
 import torch
+
+
 # from cv2box import CVImage
 # from einops import rearrange, repeat
 
 def prepare_latents(self, init_image, batch_size, num_channels_latents, video_length, height, width, dtype, device,
-                    generator, timestep=None, latents=None, **kwargs):
+                    generator, timestep=None, latents=None, without_noise=False, **kwargs):
     shape = (
         batch_size, num_channels_latents, video_length, height // self.vae_scale_factor,
         width // self.vae_scale_factor)
@@ -29,6 +31,8 @@ def prepare_latents(self, init_image, batch_size, num_channels_latents, video_le
             init_latents = torch.cat(init_latents, dim=0)
         else:
             init_latents = self.vae.encode(image.to(device, dtype=self.vae.dtype)).latent_dist.sample(generator)
+            if without_noise:
+                return init_latents.unsqueeze(2).repeat(1, 1, video_length, 1, 1)
     else:
         init_latents = None
 
@@ -53,7 +57,6 @@ def prepare_latents(self, init_image, batch_size, num_channels_latents, video_le
             latents = torch.randn(shape, generator=generator, device=rand_device, dtype=dtype).to(device)
 
             if timestep:
-
                 # ref diffusers img2img
                 init_latents = init_latents * 0.18215
                 init_latents = init_latents.unsqueeze(2).repeat(1, 1, video_length, 1, 1)
@@ -75,7 +78,12 @@ def prepare_latents(self, init_image, batch_size, num_channels_latents, video_le
                 # for i in range(video_length):
                 #     init_latents[:, :, i, :, :] = init_latents[:, :, i, :, :]*noise_patten[i]
                 # equal to "latents[:,:, i,:,:] = init_latents * 0.3259 + latents[:,:, i,:,:] * 0.9454"
+
+                # # shape debug
+                # print(shape, init_latents.shape, latents.shape)
+
                 latents = self.scheduler.add_noise(init_latents, latents, timestep)
+
 
             # ref https://github.com/kabachuha/sd-webui-text2video
             # from types import SimpleNamespace
@@ -119,3 +127,36 @@ def prepare_latents(self, init_image, batch_size, num_channels_latents, video_le
         # print(self.scheduler.init_noise_sigma) # 1.0
         latents = latents * self.scheduler.init_noise_sigma
     return latents
+
+
+# for sd inpainting
+def prepare_mask(self, batch_size, video_length, height, width, dtype, device):
+    mask = torch.ones(1, video_length, 1, height, width,
+                      device='cuda')  # Expanded the mask shape to match the latent's
+    mask[:, 0, 0] = 0
+
+    original_shape = mask.shape
+    # Resize the mask to latents shape as we concatenate the mask to the latents
+    if len(original_shape) == 5:
+        # Reshape the tensor into 4D by merging the first two dimensions
+        mask = mask.view(-1, original_shape[2], original_shape[3], original_shape[4])
+
+    mask = torch.nn.functional.interpolate(
+        mask, size=(height // self.vae_scale_factor, width // self.vae_scale_factor)
+    )
+
+    mask = mask.to(device=device, dtype=dtype)
+
+    if len(original_shape) == 5:
+        # Reshape the tensor back to 5D
+        mask = mask.view(original_shape[0], original_shape[1], mask.shape[1], mask.shape[2], mask.shape[3])
+    print(f"original shape {original_shape} and new mask {mask.shape}")
+    # mask = mask.unsqueeze(0)
+    mask = mask.permute(0, 2, 1, 3, 4)
+    mask = mask.cuda()
+    # Duplicate mask and masked_video_latents for each generation per prompt
+    if mask.shape[0] < batch_size:
+        if not batch_size % mask.shape[0] == 0:
+            raise ValueError("...")
+        mask = mask.repeat(batch_size // mask.shape[0], 1, 1, 1, 1)  # Added an extra dimension for video length
+    return mask

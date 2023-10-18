@@ -9,25 +9,22 @@ import PIL
 import diffusers
 from diffusers import AutoencoderKL, DDIMScheduler, ControlNetModel
 
-from tqdm.auto import tqdm
-from transformers import CLIPTextModel, CLIPTokenizer
-
 from animatediff.models.unet_2d_condition import AnimateDiffUNet2DConditionModel
+
 from animatediff.pipelines.stablediffusion_animatediff_pipeline import StableDiffusionAnimationPipeline
+from animatediff.pipelines.stablediffusion_animatediff_inpainting_pipeline import StableDiffusionAnimationInpaintingPipeline
 from animatediff.pipelines.stablediffusion_controlnet_animatediff_pipeline import \
     StableDiffusionControlNetAnimateDiffPipeline
 from animatediff.pipelines.stablediffusion_controlnet_reference_animatediff_pipeline import \
     StableDiffusionControlNetReferenceAnimateDiffPipeline
+
 from animatediff.utils.util import save_videos_grid
 from animatediff.utils.convert_from_ckpt import convert_ldm_unet_checkpoint, convert_ldm_clip_checkpoint, \
     convert_ldm_vae_checkpoint
 from animatediff.utils.convert_lora_safetensor_to_diffusers import convert_lora, convert_motion_lora_ckpt_to_diffusers
-from diffusers.utils.import_utils import is_xformers_available
 from ip_adapter.ip_adapter import IPAdapterPlus, IPAdapter
-from einops import rearrange, repeat
 
 from safetensors import safe_open
-import math
 from pathlib import Path
 import shutil
 
@@ -38,6 +35,7 @@ def pipeline_loading(motion_module, model_config, inference_config):
                                                            unet_additional_kwargs=OmegaConf.to_container(
                                                                inference_config.unet_additional_kwargs))
 
+    # controlnet but not reference
     if model_config.enable_controlnet and model_config.controlnet_name != 'reference':
         print('init controlnet model.')
         controlnet = ControlNetModel.from_pretrained(
@@ -55,6 +53,7 @@ def pipeline_loading(motion_module, model_config, inference_config):
             safety_checker=None,
             torch_dtype=args.dtype
         )
+    # controlnet reference mode
     elif model_config.enable_controlnet and model_config.controlnet_name == 'reference':
         print('init controlnet reference pipeline.')
         controlnet_condition_image = PIL.Image.open(model_config.controlnet_image)
@@ -67,6 +66,18 @@ def pipeline_loading(motion_module, model_config, inference_config):
             safety_checker=None,
             torch_dtype=args.dtype,
         )
+    # without controlnet, inpainting
+    elif hasattr(model_config, 'inpainting') and model_config.inpainting:
+        controlnet_condition_image = None
+        # vae = AutoencoderKL.from_pretrained('models/StableDiffusion/stable-diffusion-v1-5', subfolder="vae")
+        pipeline = StableDiffusionAnimationInpaintingPipeline.from_pretrained(
+            args.pretrained_model_path,
+            unet=unet,
+            # vae=vae,
+            scheduler=DDIMScheduler(**OmegaConf.to_container(inference_config.noise_scheduler_kwargs)),
+            torch_dtype=args.dtype
+        )
+    # without controlnet
     else:
         controlnet_condition_image = None
         pipeline = StableDiffusionAnimationPipeline.from_pretrained(
