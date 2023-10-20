@@ -10,6 +10,7 @@ import diffusers
 from diffusers import AutoencoderKL, DDIMScheduler, ControlNetModel
 
 from animatediff.models.unet_2d_condition import AnimateDiffUNet2DConditionModel
+from animatediff.models.free_lunch_utils import register_free_upblock2d,register_free_crossattn_upblock2d
 
 from animatediff.pipelines.stablediffusion_animatediff_pipeline import StableDiffusionAnimationPipeline
 from animatediff.pipelines.stablediffusion_animatediff_inpainting_pipeline import StableDiffusionAnimationInpaintingPipeline
@@ -105,6 +106,12 @@ def pipeline_loading(motion_module, model_config, inference_config):
         pipeline = ipap.return_pipe()
     else:
         ipap = None
+
+    # FreeU
+    if hasattr(model_config, 'enable_freeu') and model_config.enable_freeu:
+        print('Inject freeU.')
+        register_free_upblock2d(pipeline, b1=1.5, b2=1.6, s1=0.9, s2=0.2)
+        register_free_crossattn_upblock2d(pipeline, b1=1.5, b2=1.6, s1=0.9, s2=0.2)
 
     pipeline.enable_model_cpu_offload()
     # pipeline.to("cuda")
@@ -250,7 +257,7 @@ if __name__ == "__main__":
     parser.add_argument("--pretrained_model_path", type=str, default="models/StableDiffusion/stable-diffusion-v1-5", )
     parser.add_argument("--ip_adapter_model_dir", type=str, default="models/IP_Adapter", )
     parser.add_argument("--controlnet_model_dir", type=str, default="models/ControlNet", )
-    parser.add_argument("--inference_config", type=str, default="configs/inference/inference.yaml")
+    parser.add_argument("--inference_config", type=str, default="configs/inference/inference-v2.yaml")
     parser.add_argument("--dtype", type=torch.dtype, default=torch.float32)
     parser.add_argument("--config", type=str, required=True)
 

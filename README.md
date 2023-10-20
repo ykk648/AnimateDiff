@@ -23,6 +23,7 @@ Still under development.
 - [x] ddim inversion from [Tune-A-Video](https://github.com/showlab/Tune-A-Video)
 - [x] support [AnimateDiff v2](https://github.com/guoyww/AnimateDiff/commit/108921965da631be96cd5b6c6ea0c9bbb06ecf0b)
 - [x] support [AnimateDiff MotionLoRA](https://github.com/guoyww/AnimateDiff/tree/f82a8367ec1471711d342febd8cbef72e4670a12#features)
+- [x] support [FreeU](https://github.com/ChenyangSi/FreeU)
 - [ ] keyframe controlnet apply
 - [ ] controlnet inpainting mode
 - [ ] keyframe prompts apply
