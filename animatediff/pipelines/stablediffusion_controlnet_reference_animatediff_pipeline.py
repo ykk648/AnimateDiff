@@ -35,12 +35,11 @@ from diffusers.pipelines.stable_diffusion import StableDiffusionPipelineOutput
 from diffusers.utils import (
     is_accelerate_available,
     is_accelerate_version,
-    is_compiled_module,
     logging,
-    randn_tensor,
     replace_example_docstring,
     BaseOutput,
 )
+from diffusers.utils.torch_utils import is_compiled_module, randn_tensor
 from diffusers.image_processor import VaeImageProcessor
 from einops import rearrange
 

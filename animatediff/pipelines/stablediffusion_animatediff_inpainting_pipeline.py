@@ -28,9 +28,7 @@ from diffusers.schedulers import (
 from diffusers.utils import (
     is_accelerate_available,
     is_accelerate_version,
-    is_compiled_module,
     logging,
-    randn_tensor,
     replace_example_docstring,
     BaseOutput,
 )
