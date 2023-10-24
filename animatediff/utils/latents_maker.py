@@ -5,10 +5,18 @@
 import PIL
 from animatediff.utils.util import preprocess_image
 import torch
+from tqdm import tqdm
+from einops import rearrange, repeat
 
 
-# from cv2box import CVImage
-# from einops import rearrange, repeat
+def get_timesteps(scheduler, num_inference_steps, strength):
+    # get the original timestep using init_timestep
+    init_timestep = min(int(num_inference_steps * strength), num_inference_steps)
+
+    t_start = max(num_inference_steps - init_timestep, 0)
+    timesteps = scheduler.timesteps[t_start:]
+
+    return timesteps, num_inference_steps - t_start
 
 def prepare_latents(self, init_image, batch_size, num_channels_latents, video_length, height, width, dtype, device,
                     generator, timestep=None, latents=None, without_noise=False, **kwargs):
@@ -31,6 +39,7 @@ def prepare_latents(self, init_image, batch_size, num_channels_latents, video_le
             init_latents = torch.cat(init_latents, dim=0)
         else:
             init_latents = self.vae.encode(image.to(device, dtype=self.vae.dtype)).latent_dist.sample(generator)
+            # for inpainting masked_image_latent
             if without_noise:
                 return init_latents.unsqueeze(2).repeat(1, 1, video_length, 1, 1)
     else:
@@ -41,6 +50,7 @@ def prepare_latents(self, init_image, batch_size, num_channels_latents, video_le
             f"You have passed a list of generators of length {len(generator)}, but requested an effective batch"
             f" size of {batch_size}. Make sure the batch size matches the length of the generators."
         )
+
     if latents is None:
         rand_device = "cpu" if device.type == "mps" else device
 
@@ -61,6 +71,7 @@ def prepare_latents(self, init_image, batch_size, num_channels_latents, video_le
                 init_latents = init_latents * 0.18215
                 init_latents = init_latents.unsqueeze(2).repeat(1, 1, video_length, 1, 1)
 
+                # for video2video
                 # from cv2box import get_path_by_ext
                 # init_latents_gifs = []
                 # for image_p in get_path_by_ext(./samples/AstronautMars_v2_motionlora-2023-09-26T02-04-19/test', sorted_by_stem=True):
@@ -74,16 +85,13 @@ def prepare_latents(self, init_image, batch_size, num_channels_latents, video_le
                 # # init_latents_gif.rearrange((1,2,0,3,4))
                 # init_latents_gifs = rearrange(init_latents_gifs, "f b c h w -> b c f h w")
 
+                # from talesofai
                 # noise_patten = [1, 1, 1, 1, 0.6, 0.6, 0.6, 0.6, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3]
                 # for i in range(video_length):
                 #     init_latents[:, :, i, :, :] = init_latents[:, :, i, :, :]*noise_patten[i]
                 # equal to "latents[:,:, i,:,:] = init_latents * 0.3259 + latents[:,:, i,:,:] * 0.9454"
 
-                # # shape debug
-                # print(shape, init_latents.shape, latents.shape)
-
                 latents = self.scheduler.add_noise(init_latents, latents, timestep)
-
 
             # ref https://github.com/kabachuha/sd-webui-text2video
             # from types import SimpleNamespace
@@ -160,3 +168,21 @@ def prepare_mask(self, batch_size, video_length, height, width, dtype, device):
             raise ValueError("...")
         mask = mask.repeat(batch_size // mask.shape[0], 1, 1, 1, 1)  # Added an extra dimension for video length
     return mask
+
+
+# Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.decode_latents
+def decode_latents(self, latents):
+    video_length = latents.shape[2]
+    latents = 1 / 0.18215 * latents
+    latents = rearrange(latents, "b c f h w -> (b f) c h w")
+    # video = self.vae.decode(latents).sample
+    video = []
+    for frame_idx in tqdm(range(latents.shape[0])):
+        video.append(
+            self.vae.decode(latents[frame_idx:frame_idx + 1].to(self.vae.device, dtype=self.vae.dtype)).sample)
+    video = torch.cat(video)
+    video = rearrange(video, "(b f) c h w -> b c f h w", f=video_length)
+    video = (video / 2 + 0.5).clamp(0, 1)
+    # we always cast to float32 as this does not cause significant overhead and is compatible with bfloa16
+    video = video.cpu().float().numpy()
+    return video

@@ -129,7 +129,7 @@ class IPAdapter:
 
         with torch.inference_mode():
             prompt_embeds = self.pipe._encode_prompt(
-                prompt, device=self.device, num_videos_per_prompt=num_samples, do_classifier_free_guidance=True,
+                prompt, device=self.device, num_images_per_prompt=num_samples, do_classifier_free_guidance=True,
                 negative_prompt=negative_prompt)
             negative_prompt_embeds_, prompt_embeds_ = prompt_embeds.chunk(2)
             prompt_embeds = torch.cat([prompt_embeds_, image_prompt_embeds], dim=1)

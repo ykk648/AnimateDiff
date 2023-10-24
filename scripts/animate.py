@@ -16,14 +16,13 @@ from animatediff.pipelines.stablediffusion_animatediff_pipeline import StableDif
 from animatediff.pipelines.stablediffusion_animatediff_inpainting_pipeline import StableDiffusionAnimationInpaintingPipeline
 from animatediff.pipelines.stablediffusion_controlnet_animatediff_pipeline import \
     StableDiffusionControlNetAnimateDiffPipeline
-from animatediff.pipelines.stablediffusion_controlnet_reference_animatediff_pipeline import \
-    StableDiffusionControlNetReferenceAnimateDiffPipeline
 
 from animatediff.utils.util import save_videos_grid
 from animatediff.utils.convert_from_ckpt import convert_ldm_unet_checkpoint, convert_ldm_clip_checkpoint, \
     convert_ldm_vae_checkpoint
 from animatediff.utils.convert_lora_safetensor_to_diffusers import convert_lora, convert_motion_lora_ckpt_to_diffusers
 from ip_adapter.ip_adapter import IPAdapterPlus, IPAdapter
+from sd_lib.controlnet import ControlNet
 
 from safetensors import safe_open
 from pathlib import Path
@@ -37,39 +36,28 @@ def pipeline_loading(motion_module, model_config, inference_config):
                                                                inference_config.unet_additional_kwargs))
 
     # controlnet but not reference
-    if model_config.enable_controlnet and model_config.controlnet_name != 'reference':
+    controlnet_list, controlnet_condition_image_list, controlnet_frame_list = [], [], []
+    if model_config.enable_controlnet:
         print('init controlnet model.')
-        controlnet = ControlNetModel.from_pretrained(
-            f"{args.controlnet_model_dir}/{model_config.controlnet_name}",
-            torch_dtype=args.dtype,
-            use_safetensors=False
-        )
-        controlnet_condition_image = PIL.Image.open(model_config.controlnet_image)
+        for controlnet_n in model_config.controlnets:
+            controlnet_list.append(ControlNet(model_config.controlnets[controlnet_n].controlnet_name, dtype=args.dtype))
+            controlnet_condition_image = model_config.controlnets[controlnet_n].controlnet_image
+            if hasattr(model_config.controlnets[controlnet_n], 'controlnet_mask_image'):
+                controlnet_condition_image = [controlnet_condition_image,model_config.controlnets[controlnet_n].controlnet_mask_image]
+            controlnet_condition_image_list.append(controlnet_condition_image)
+            controlnet_frame_list.append(model_config.controlnets[controlnet_n].controlnet_frame)
+
         pipeline = StableDiffusionControlNetAnimateDiffPipeline.from_pretrained(
             args.pretrained_model_path,
             unet=unet,
-            controlnet=controlnet,
+            controlnet=controlnet_list,
             feature_extractor=None,
             scheduler=DDIMScheduler(**OmegaConf.to_container(inference_config.noise_scheduler_kwargs)),
             safety_checker=None,
             torch_dtype=args.dtype
         )
-    # controlnet reference mode
-    elif model_config.enable_controlnet and model_config.controlnet_name == 'reference':
-        print('init controlnet reference pipeline.')
-        controlnet_condition_image = PIL.Image.open(model_config.controlnet_image)
-        pipeline = StableDiffusionControlNetReferenceAnimateDiffPipeline.from_pretrained(
-            args.pretrained_model_path,
-            unet=unet,
-            controlnet=None,
-            feature_extractor=None,
-            scheduler=DDIMScheduler(**OmegaConf.to_container(inference_config.noise_scheduler_kwargs)),
-            safety_checker=None,
-            torch_dtype=args.dtype,
-        )
     # without controlnet, inpainting
     elif hasattr(model_config, 'inpainting') and model_config.inpainting:
-        controlnet_condition_image = None
         # vae = AutoencoderKL.from_pretrained('models/StableDiffusion/stable-diffusion-v1-5', subfolder="vae")
         pipeline = StableDiffusionAnimationInpaintingPipeline.from_pretrained(
             args.pretrained_model_path,
@@ -80,7 +68,6 @@ def pipeline_loading(motion_module, model_config, inference_config):
         )
     # without controlnet
     else:
-        controlnet_condition_image = None
         pipeline = StableDiffusionAnimationPipeline.from_pretrained(
             args.pretrained_model_path,
             unet=unet,
@@ -167,7 +154,7 @@ def pipeline_loading(motion_module, model_config, inference_config):
                 "state_dict"] if "state_dict" in motion_lora_state_dict else motion_lora_state_dict
 
             pipeline = convert_motion_lora_ckpt_to_diffusers(pipeline, motion_lora_state_dict, alpha)
-    return pipeline, ipap, controlnet_condition_image
+    return pipeline, ipap, controlnet_condition_image_list, controlnet_frame_list
 
 
 def main(args):
@@ -186,7 +173,7 @@ def main(args):
         motion_modules = [motion_modules] if isinstance(motion_modules, str) else list(motion_modules)
         for motion_module in motion_modules:
 
-            pipeline, ipap, controlnet_condition_image = pipeline_loading(motion_module, model_config, inference_config)
+            pipeline, ipap, controlnet_condition_image_list, controlnet_frame_list = pipeline_loading(motion_module, model_config, inference_config)
 
             ### <<< create validation pipeline <<< ###
 
@@ -221,20 +208,21 @@ def main(args):
                 sample = pipeline(
                     prompt,
                     init_image=init_image,
-                    image=controlnet_condition_image,
+                    control_image=controlnet_condition_image_list,
                     denoise_strength=model_config.denoise_strength,
-                    # init_alpha=model_config.init_alpha,
-                    # alpha_step=model_config.alpha_step,
-                    # truncate_alpha=model_config.truncate_alpha,
                     negative_prompt=n_prompt,
                     prompt_embeds=prompt_embeds,
                     num_inference_steps=model_config.steps,
                     guidance_scale=model_config.guidance_scale,
-                    reference_attn=True,
-                    reference_adain=False,
                     width=args.W,
                     height=args.H,
                     video_length=args.L,
+                    # controlnet
+                    controlnet_frame=controlnet_frame_list,
+                    # reference
+                    reference_attn=model_config.enable_reference,
+                    reference_adain=False,
+                    style_fidelity=model_config.style_fidelity,
                 ).videos
                 samples.append(sample)
 
