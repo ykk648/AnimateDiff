@@ -1,16 +1,23 @@
-all:
+single-controlnet:
   base: ""
   lora: ""
 
-  init_image: "__assets__/ipadapter/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"
+  init_image: "__assets__/astronaut_mars/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"
   denoise_strength: 0.84
 
   enable_ipadapter: true
   ip_strength: 1
 
+  enable_freeu: false
+
   enable_controlnet: true
-  controlnet_name: reference
-  controlnet_image: "__assets__/ipadapter/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"
+  enable_reference: true
+  style_fidelity: 0.2
+  controlnets:
+    controlnet_1:
+      controlnet_name: control_v11p_sd15_canny
+      controlnet_image: "__assets__/astronaut_mars/astronaut_canny.png"
+      controlnet_frame: [1,0.6,0.5,0.3,0.1,0,0,0,0,0,0,0,0,0,0,0]
 
   motion_module:
     - "models/Motion_Module/mm_sd_v15_v2.ckpt"
@@ -24,99 +31,31 @@ all:
     - "An astronaut is riding a horse on Mars"
   n_prompt:
     - "monochrome, lowres, bad anatomy, worst quality, low quality"
-without_denoise:
+multi-controlnet:
   base: ""
   lora: ""
 
-  init_image: "__assets__/ipadapter/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"
-  denoise_strength: 1
+  init_image: "__assets__/astronaut_mars/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"
+  denoise_strength: 0.92
 
   enable_ipadapter: true
   ip_strength: 1
 
-  enable_controlnet: true
-  controlnet_name: reference
-  controlnet_image: "__assets__/ipadapter/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"
-
-  motion_module:
-    - "models/Motion_Module/mm_sd_v15_v2.ckpt"
-
-  seed:           [444264997]
-  steps:          25
-  guidance_scale: 7.5
-  lora_alpha: 0.8
-
-  prompt:
-    - "An astronaut is riding a horse on Mars"
-  n_prompt:
-    - "monochrome, lowres, bad anatomy, worst quality, low quality"
-without_ipadapter:
-  base: ""
-  lora: ""
-
-  init_image: "__assets__/ipadapter/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"
-  denoise_strength: 0.84
-
-  enable_ipadapter: false
-  ip_strength: 1
+  enable_freeu: false
 
   enable_controlnet: true
-  controlnet_name: reference
-  controlnet_image: "__assets__/ipadapter/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"
-
-  motion_module:
-    - "models/Motion_Module/mm_sd_v15_v2.ckpt"
-
-  seed:           [444264997]
-  steps:          25
-  guidance_scale: 7.5
-  lora_alpha: 0.8
-
-  prompt:
-    - "An astronaut is riding a horse on Mars"
-  n_prompt:
-    - "monochrome, lowres, bad anatomy, worst quality, low quality"
-without_controlnet:
-  base: ""
-  lora: ""
-
-  init_image: "__assets__/ipadapter/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"
-  denoise_strength: 0.84
-
-  enable_ipadapter: true
-  ip_strength: 1
-
-  enable_controlnet: true
-  controlnet_name: reference
-  controlnet_image: "__assets__/ipadapter/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"
-
-  motion_module:
-    - "models/Motion_Module/mm_sd_v15_v2.ckpt"
-
-  seed:           [444264997]
-  steps:          25
-  guidance_scale: 7.5
-  lora_alpha: 0.8
-
-  prompt:
-    - "An astronaut is riding a horse on Mars"
-  n_prompt:
-    - "monochrome, lowres, bad anatomy, worst quality, low quality"
-FreeU:
-  base: ""
-  lora: ""
-
-  init_image: "__assets__/ipadapter/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"
-  denoise_strength: 0.84
-
-  enable_ipadapter: true
-  ip_strength: 1
-
-  enable_freeu: true
-
-  enable_controlnet: true
-  controlnet_name: reference
-  controlnet_image: "__assets__/ipadapter/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"
+  enable_reference: true
+  style_fidelity: 0.2
+  controlnets:
+    controlnet_1:
+      controlnet_name: control_v11p_sd15_inpaint
+      controlnet_image: "__assets__/astronaut_mars/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"
+      controlnet_mask_image: "__assets__/astronaut_mars/astronaut_mask.png"
+      controlnet_frame: [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+    controlnet_2:
+      controlnet_name: control_v11p_sd15_canny
+      controlnet_image: "__assets__/astronaut_mars/astronaut_canny.png"
+      controlnet_frame: [1,0.6,0.5,0.3,0.1,0,0,0,0,0,0,0,0,0,0,0]
 
   motion_module:
     - "models/Motion_Module/mm_sd_v15_v2.ckpt"

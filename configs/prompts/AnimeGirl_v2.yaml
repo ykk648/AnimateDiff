@@ -1,0 +1,37 @@
+multi-controlnet:
+  base: "models/DreamBooth_LoRA/AnythingV5_v5PrtRE.safetensors"
+  lora: ""
+
+  init_image: "__assets__/anime_girl_pairs/tds_1st_image.png"
+  denoise_strength: 1
+
+  enable_ipadapter: false
+  ip_strength: 1
+
+  enable_freeu: false
+
+  enable_controlnet: true
+  enable_reference: true
+  style_fidelity: 0.2
+  controlnets:
+    controlnet_1:
+      controlnet_name: control_v11f1e_sd15_tile
+      controlnet_image: "__assets__/anime_girl_pairs/tds_1st_image.png"
+      controlnet_frame: [1,0.6,0.5,0.4,0.3,0.2,0.1,0,0,0,0,0,0,0,0,0 ]
+    controlnet_2:
+      controlnet_name: control_v11f1e_sd15_tile
+      controlnet_image: "__assets__/anime_girl_pairs/tds_2nd_image.png"
+      controlnet_frame: [ 0,0,0,0,0,0,0,0,0,0.1,0.2,0.3,0.4,0.5,0.6,1 ]
+
+  motion_module:
+    - "models/Motion_Module/mm_sd_v15_v2.ckpt"
+
+  seed:           [-1]
+  steps:          25
+  guidance_scale: 7.5
+  lora_alpha: 0.8
+
+  prompt:
+    - "1girl, looking at viewer, upper body, closed mouth"
+  n_prompt:
+    - "monochrome, lowres, bad anatomy, worst quality, low quality"

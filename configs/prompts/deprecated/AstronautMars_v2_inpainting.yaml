@@ -1,0 +1,30 @@
+without_controlnet:
+  base: "/data/ljt/codes/AIGC/stable-diffusion-webui/models/Stable-diffusion/AnythingV5_v5PrtRE.safetensors"
+  lora: ""
+
+  init_image: "__assets__/ipadapter/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997_256.png"
+  denoise_strength: 1
+
+  inpainting: true
+
+  enable_ipadapter: false
+  ip_strength: 1
+
+  enable_controlnet: false
+  controlnet_name: reference
+  controlnet_image:
+    - "__assets__/ipadapter/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997_256.png"
+    - "__assets__/ipadapter/astronaut_mask.png"
+
+  motion_module:
+    - "models/Motion_Module/TemporalImage-v1-256.ckpt"
+
+  seed:           [444264997]
+  steps:          25
+  guidance_scale: 7.5
+  lora_alpha: 0.8
+
+  prompt:
+    - "An astronaut is riding a horse on Mars"
+  n_prompt:
+    - "monochrome, lowres, bad anatomy, worst quality, low quality"
