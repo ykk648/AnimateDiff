@@ -1,3 +1,31 @@
+wo-controlnet:
+  base: ""
+  lora: ""
+
+  init_image: "__assets__/astronaut_mars/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"
+  denoise_strength: 0.84
+
+  enable_ipadapter: true
+  ip_strength: 1
+
+  enable_freeu: false
+
+  enable_controlnet: false
+  enable_reference: false
+  style_fidelity: 0.2
+
+  motion_module:
+    - "models/Motion_Module/mm_sd_v15_v2.ckpt"
+
+  seed:           [444264997]
+  steps:          25
+  guidance_scale: 7.5
+  lora_alpha: 0.8
+
+  prompt:
+    - "An astronaut is riding a horse on Mars"
+  n_prompt:
+    - "monochrome, lowres, bad anatomy, worst quality, low quality"
 single-controlnet:
   base: ""
   lora: ""

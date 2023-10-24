@@ -19,25 +19,43 @@ Still under development.
 - [x] controlnet from [TDS4874](https://github.com/TDS4874/sd-webui-controlnet/tree/animate-diff-support)
 - [x] solve/locate color degrade problem, check [TDS_ solution](https://note.com/tds_/n/n5aad9ef8a9b1), It seems that any color problems came from DDIM params.
 - [x] controlnet reference mode
-- [ ] controlnet multi module mode
+- [x] controlnet multi module mode
 - [x] ddim inversion from [Tune-A-Video](https://github.com/showlab/Tune-A-Video)
 - [x] support [AnimateDiff v2](https://github.com/guoyww/AnimateDiff/commit/108921965da631be96cd5b6c6ea0c9bbb06ecf0b)
 - [x] support [AnimateDiff MotionLoRA](https://github.com/guoyww/AnimateDiff/tree/f82a8367ec1471711d342febd8cbef72e4670a12#features)
 - [x] support [FreeU](https://github.com/ChenyangSi/FreeU)
-- [ ] keyframe controlnet apply
-- [ ] controlnet inpainting mode
+- [x] keyframe controlnet apply
+- [x] controlnet inpainting mode
 - [ ] keyframe prompts apply
 
 ## Experience
 
+### Multi Controlnet
+
+inpainting + canny
+<table>
+    <tr>
+    <td>inpainting + canny</td>
+    <td><img src="__assets__/astronaut_mars/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"></td>
+    <td><img src="__assets__/astronaut_mars/astronaut_mask.png"></td>
+    <td><img src="__assets__/results/multi_controlnet/astronaut_inpaint_canny.gif"></td>
+    </tr>
+    <tr>
+    <td>tail + tail</td>
+    <td><img src="__assets__/anime_girl_pairs/tds_1st_image.png"></td>
+    <td><img src="__assets__/anime_girl_pairs/tds_2nd_image.png"></td>
+    <td><img src="__assets__/results/multi_controlnet/anime_girl_pairs_tail.gif"></td>
+    </tr>
+</table>
+
 ### MotionLoRA I2V results:   
 
 Zoom In / Zoom Out
-
+results from [this old branch](https://github.com/ykk648/AnimateDiff-I2V/tree/d8b30bfff0748c0839e4cfc084aaaa2930627637)
 <table>
     <tr>
-    <td><img src="__assets__/ipadapter/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"></td>
-    <td><img src="__assets__/motion_lora/astronaut_zoom_out_in.gif"></td>
+    <td><img src="__assets__/astronaut_mars/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"></td>
+    <td><img src="__assets__/results/motion_lora/astronaut_zoom_out_in.gif"></td>
     </tr>
 </table>
 <p style="margin-left: 2em; margin-top: -1em">
@@ -50,14 +68,14 @@ all / without denoise strength / without ipadapter / without controlnet(first fr
 
 <table>
     <tr>
-    <td><img src="__assets__/ipadapter/a_girl_in_the_wind.png"></td>
-    <td><img src="__assets__/images_with_control/results/girl_wind.gif"></td>
+    <td><img src="__assets__/a_girl_in_the_wind/a_girl_in_the_wind.png"></td>
+    <td><img src="__assets__/results/images_with_control/girl_wind.gif"></td>
     </tr>
 </table>
 <table>
     <tr>
-    <td><img src="__assets__/ipadapter/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"></td>
-    <td><img src="__assets__/images_with_control/results/astronaut_mars.gif"></td>
+    <td><img src="__assets__/astronaut_mars/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"></td>
+    <td><img src="__assets__/results/images_with_control/astronaut_mars.gif"></td>
     </tr>
 </table>
 <p style="margin-left: 2em; margin-top: -1em">
@@ -69,14 +87,14 @@ Below is old results from [this ols branch](https://github.com/ykk648/AnimateDif
 
 <table>
     <tr>
-    <td><img src="__assets__/ipadapter/a_girl_in_the_wind.png"></td>
-    <td><img src="__assets__/ipadapter/results/girl_wind.gif"></td>
+    <td><img src="__assets__/a_girl_in_the_wind/a_girl_in_the_wind.png"></td>
+    <td><img src="__assets__/results/ipadapter/girl_wind.gif"></td>
     </tr>
 </table>
 <table>
     <tr>
-    <td><img src="__assets__/ipadapter/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"></td>
-    <td><img src="__assets__/ipadapter/results/astronaut_mars.gif"></td>
+    <td><img src="__assets__/astronaut_mars/An_astronaut_is_riding_a_horse_on_Mars_seed-444264997.png"></td>
+    <td><img src="__assets__/results/ipadapter/astronaut_mars.gif"></td>
     </tr>
 </table>
 <p style="margin-left: 2em; margin-top: -1em">
@@ -98,9 +116,9 @@ Already test in [AI_power](https://github.com/ykk648/AI_power/blob/main/sd_lib/c
 
 <table>
     <tr>
-    <td><img src="__assets__/animations/model_07/init.jpg"></td>
-    <td><img src="__assets__/animations/model_07/0802_v14.gif"></td>
-    <td><img src="__assets__/animations/model_07/0802_v15.gif"></td>
+    <td><img src="__assets__/results/animations/model_07/init.jpg"></td>
+    <td><img src="__assets__/results/animations/model_07/0802_v14.gif"></td>
+    <td><img src="__assets__/results/animations/model_07/0802_v15.gif"></td>
     </tr>
 </table>
 <p style="margin-left: 2em; margin-top: -1em">
@@ -108,18 +126,18 @@ Character Model：<a href="https://civitai.com/models/13237/genshen-impact-yoimi
 
 <table>
     <tr>
-    <td><img src="__assets__/animations/model_11/miko_init.png"></td>
-    <td><img src="__assets__/animations/model_11/0803_v14.gif"></td>
-    <td><img src="__assets__/animations/model_11/0803_v15.gif"></td>
+    <td><img src="__assets__/results/animations/model_11/miko_init.png"></td>
+    <td><img src="__assets__/results/animations/model_11/0803_v14.gif"></td>
+    <td><img src="__assets__/results/animations/model_11/0803_v15.gif"></td>
     </tr>
 </table>
 Character Model：<a href="https://civitai.com/models/8484?modelVersionId=11523">Yae Miko</a> (with an initial reference image.)
 
 <table>
     <tr>
-    <td><img src="__assets__/animations/model_12/init_image.jpg"></td>
-    <td><img src="__assets__/animations/model_12/0804_v14.gif"></td>
-    <td><img src="__assets__/animations/model_12/0804_v15.gif"></td>
+    <td><img src="__assets__/results/animations/model_12/init_image.jpg"></td>
+    <td><img src="__assets__/results/animations/model_12/0804_v14.gif"></td>
+    <td><img src="__assets__/results/animations/model_12/0804_v15.gif"></td>
     </tr>
 </table>
 without Character Model, frame 20
