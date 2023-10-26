@@ -40,7 +40,7 @@ def pipeline_loading(motion_module, model_config, inference_config):
     if model_config.enable_controlnet:
         print('init controlnet model.')
         for controlnet_n in model_config.controlnets:
-            controlnet_list.append(ControlNet(model_config.controlnets[controlnet_n].controlnet_name, dtype=args.dtype))
+            controlnet_list.append(ControlNet(model_config.controlnets[controlnet_n].controlnet_name, height=args.H, width=args.W, dtype=args.dtype))
             controlnet_condition_image = model_config.controlnets[controlnet_n].controlnet_image
             if hasattr(model_config.controlnets[controlnet_n], 'controlnet_mask_image'):
                 controlnet_condition_image = [controlnet_condition_image,model_config.controlnets[controlnet_n].controlnet_mask_image]

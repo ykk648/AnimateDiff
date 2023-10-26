@@ -26,7 +26,7 @@ def prepare_latents(self, init_image, batch_size, num_channels_latents, video_le
 
     if init_image is not None:
         image = PIL.Image.open(init_image)
-        image = preprocess_image(image)
+        image = preprocess_image(image, width, height)
         if not isinstance(image, (torch.Tensor, PIL.Image.Image, list)):
             raise ValueError(
                 f"`image` has to be of type `torch.Tensor`, `PIL.Image.Image` or list but is {type(image)}"

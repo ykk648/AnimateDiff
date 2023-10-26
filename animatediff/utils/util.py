@@ -136,14 +136,14 @@ def numpy_to_pil(images):
         pil_images = [Image.fromarray(image) for image in images]
 
 
-def preprocess_image(image):
+def preprocess_image(image, w, h):
     if isinstance(image, torch.Tensor):
         return image
     elif isinstance(image, PIL.Image.Image):
         image = [image]
 
     if isinstance(image[0], PIL.Image.Image):
-        w, h = image[0].size
+        # w, h = image[0].size
         w, h = map(lambda x: x - x % 8, (w, h))  # resize to integer multiple of 8
 
         image = [np.array(i.resize((w, h), resample=PIL_INTERPOLATION["lanczos"]))[None, :] for i in image]
