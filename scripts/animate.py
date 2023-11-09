@@ -78,6 +78,7 @@ def pipeline_loading(motion_module, model_config, inference_config):
     # AnimateDiff Motion Module
     motion_module_state_dict = torch.load(motion_module, map_location="cpu")
     missing, unexpected = pipeline.unet.load_state_dict(motion_module_state_dict, strict=False)
+    print(f'missing {len(missing)} unexpected {unexpected}')
     assert len(unexpected) == 0
 
     # Must enable before IpAdapter init, don't know why

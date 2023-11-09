@@ -66,7 +66,7 @@ def prepare_latents(self, init_image, batch_size, num_channels_latents, video_le
         else:
             latents = torch.randn(shape, generator=generator, device=rand_device, dtype=dtype).to(device)
 
-            if timestep:
+            if timestep and init_latents:
                 # ref diffusers img2img
                 init_latents = init_latents * 0.18215
                 init_latents = init_latents.unsqueeze(2).repeat(1, 1, video_length, 1, 1)
@@ -171,7 +171,7 @@ def prepare_mask(self, batch_size, video_length, height, width, dtype, device):
 
 
 # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.decode_latents
-def decode_latents(self, latents):
+def decode_latents(self, latents, device):
     video_length = latents.shape[2]
     latents = 1 / 0.18215 * latents
     latents = rearrange(latents, "b c f h w -> (b f) c h w")
@@ -179,7 +179,7 @@ def decode_latents(self, latents):
     video = []
     for frame_idx in tqdm(range(latents.shape[0])):
         video.append(
-            self.vae.decode(latents[frame_idx:frame_idx + 1].to(self.vae.device, dtype=self.vae.dtype)).sample)
+            self.vae.decode(latents[frame_idx:frame_idx + 1].to(device, dtype=self.vae.dtype)).sample)
     video = torch.cat(video)
     video = rearrange(video, "(b f) c h w -> b c f h w", f=video_length)
     video = (video / 2 + 0.5).clamp(0, 1)

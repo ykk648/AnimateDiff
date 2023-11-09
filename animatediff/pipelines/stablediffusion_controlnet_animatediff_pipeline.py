@@ -695,7 +695,7 @@ class StableDiffusionControlNetAnimateDiffPipeline(StableDiffusionControlNetPipe
             torch.cuda.empty_cache()
 
         # Post-processing
-        video = decode_latents(self, latents)
+        video = decode_latents(self, latents, device)
 
         # Convert to tensor
         if output_type == "tensor":

@@ -477,7 +477,7 @@ class StableDiffusionAnimationInpaintingPipeline(DiffusionPipeline, FromSingleFi
                         callback(i, t, latents)
 
         # Post-processing
-        video = self.decode_latents(latents)
+        video = decode_latents(self, latents, device)
 
         # Convert to tensor
         if output_type == "tensor":
