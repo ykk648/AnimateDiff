@@ -26,6 +26,7 @@ Still under development.
 - [x] support [FreeU](https://github.com/ChenyangSi/FreeU)
 - [x] keyframe controlnet apply
 - [x] controlnet inpainting mode
+- [x] support AnimateDiff v3 wo SparseCtrl
 - [ ] keyframe prompts apply
 
 ## Experience
